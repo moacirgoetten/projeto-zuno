@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zuno — Protótipo navegável</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <!-- TELA LOGIN -->
+    <section class="screen auth-screen active" id="login-screen">
+        <main class="auth-page">
+            <div class="auth-shell"><a class="brand" href="#" data-screen="login-screen"><span
+                        class="brand-mark">z</span><span>zuno</span></a>
+                <section class="auth-card">
+                    <p class="eyebrow">SEU CAMPUS, SUA COMUNIDADE</p>
+                    <h1>Conexões começam<br>por interesses.</h1>
+                    <p class="muted">Encontre pessoas da sua universidade no seu ritmo.</p>
+                    <form id="login-form"><label for="email">E-mail universitário</label><input id="email" type="email"
+                            placeholder="voce@universidade.edu.br" required><label for="senha">Senha</label><input
+                            id="senha" type="password" placeholder="Sua senha" required><button class="btn primary full"
+                            type="submit">Entrar</button></form>
+                    <p class="form-note" id="login-feedback" aria-live="polite"></p>
+                    <p class="center muted">Ainda não tem conta? <a href="#" data-screen="cadastro-screen">Criar
+                            cadastro</a></p>
+                </section>
+                <p class="footer-note">Um espaço leve para conhecer gente parecida com você.</p>
+            </div>
+        </main>
+    </section>
+    <!-- TELA CADASTRO -->
+    <section class="screen auth-screen" id="cadastro-screen">
+        <main class="auth-page">
+            <div class="auth-shell"><a class="brand" href="#" data-screen="login-screen"><span
+                        class="brand-mark">z</span><span>zuno</span></a>
+                <section class="auth-card">
+                    <p class="eyebrow">VAMOS COMEÇAR</p>
+                    <h1>Crie seu espaço.</h1>
+                    <p class="muted">Você decide como e quando começar uma conversa.</p>
+                    <form id="signup-form">
+                        <div class="form-grid">
+                            <div class="field-wide"><label for="nome">Nome</label><input id="nome"
+                                    placeholder="Como podemos te chamar?" required></div>
+                            <div class="field-wide"><label for="email-cadastro">E-mail universitário</label><input
+                                    id="email-cadastro" type="email" placeholder="voce@universidade.edu.br" required>
+                            </div>
+                            <div><label for="universidade">Universidade</label><input id="universidade"
+                                    placeholder="Sua universidade" required></div>
+                            <div><label for="curso">Curso</label><input id="curso" placeholder="Seu curso" required>
+                            </div>
+                            <div class="field-wide"><label for="senha-cadastro">Crie uma senha</label><input
+                                    id="senha-cadastro" type="password" minlength="8"
+                                    placeholder="Mínimo de 8 caracteres" required></div>
+                        </div><label class="checkline"><input type="checkbox" id="consentimento" required> Li e aceito o
+                            uso dos meus dados para funcionamento do Zuno.</label><button class="btn primary full"
+                            type="submit">Criar minha conta</button>
+                    </form>
+                    <p id="signup-feedback" class="form-note" aria-live="polite"></p>
+                    <p class="center muted">Já tem conta? <a href="#" data-screen="login-screen">Entrar</a></p>
+                </section>
+            </div>
+        </main>
+    </section>
+    <!-- ÁREA PRINCIPAL COM NAVEGAÇÃO ENTRE 4 TELAS -->
+    <div class="screen" id="app-screen">
+        <div class="app-layout">
+            <aside class="sidebar"><a class="brand" href="#" data-screen="sugestoes-screen"><span
+                        class="brand-mark">z</span><span>zuno</span></a>
+                <nav><button class="active" data-screen="sugestoes-screen">◈ <span>Sugestões</span></button><button
+                        data-screen="perfil-screen">◎ <span>Meu perfil</span></button><button
+                        data-screen="conexoes-screen">♡ <span>Conexões</span></button><button
+                        data-screen="mensagens-screen">▤ <span>Mensagens</span></button></nav>
+                <div class="side-bottom"><span class="avatar small">MG</span><span><b>Meu
+                            espaço</b><small>Protótipo</small></span></div>
+            </aside>
+            <main class="main-content">
+                <!-- SUGESTOES -->
+                <section class="screen active" id="sugestoes-screen">
+                    <header class="topbar">
+                        <div>
+                            <p class="eyebrow">GENTE QUE COMBINA COM VOCÊ</p>
+                            <h1>Descubra suas conexões</h1>
+                            <p class="muted">Interesses em comum podem ser um ótimo começo.</p>
+                        </div><button class="btn outline" data-screen="login-screen">Sair</button>
+                    </header>
+                    <section class="toolbar">
+                        <div class="searchbox"><span>⌕</span><input id="people-search"
+                                placeholder="Buscar por nome ou interesse..." aria-label="Buscar pessoas"></div><select
+                            id="interest-filter" aria-label="Filtrar por interesse">
+                            <option value="">Todos os interesses</option>
+                            <option>Design</option>
+                            <option>Música</option>
+                            <option>Leitura</option>
+                            <option>Tecnologia</option>
+                            <option>Cinema</option>
+                        </select>
+                    </section>
+                    <div class="people-grid" id="people-grid">
+                        <article class="person-card" data-name="Lucas Costa" data-interests="Tecnologia Música Jogos">
+                            <div class="person-top">
+                                <div class="avatar purple">LC</div><span class="match">● 3 em comum</span>
+                            </div>
+                            <h2>Lucas Costa</h2>
+                            <p class="muted">Ciência da Computação · 2º semestre</p>
+                            <p class="person-bio">Curioso por tecnologia, música ao vivo e projetos criativos.</p>
+                            <div class="chips"><span class="chip">💻 Tecnologia</span><span class="chip">🎵
+                                    Música</span><span class="chip">🎮 Jogos</span></div><button
+                                class="btn primary full connect-btn">Enviar conexão</button>
+                        </article>
+                        <article class="person-card" data-name="Ana Ribeiro" data-interests="Design Cinema Leitura">
+                            <div class="person-top">
+                                <div class="avatar peach">AR</div><span class="match">● 2 em comum</span>
+                            </div>
+                            <h2>Ana Ribeiro</h2>
+                            <p class="muted">Design · 3º semestre</p>
+                            <p class="person-bio">Adoro ilustração, cinema independente e boas conversas.</p>
+                            <div class="chips"><span class="chip">🎨 Design</span><span class="chip">🎬
+                                    Cinema</span><span class="chip">📚 Leitura</span></div><button
+                                class="btn primary full connect-btn">Enviar conexão</button>
+                        </article>
+                        <article class="person-card" data-name="Pedro Martins" data-interests="Música Leitura Cinema">
+                            <div class="person-top">
+                                <div class="avatar green">PM</div><span class="match">● 2 em comum</span>
+                            </div>
+                            <h2>Pedro Martins</h2>
+                            <p class="muted">Jornalismo · 1º semestre</p>
+                            <p class="person-bio">Leitor de ficção, fã de música e explorador de cafeterias.</p>
+                            <div class="chips"><span class="chip">📚 Leitura</span><span class="chip">🎵
+                                    Música</span><span class="chip">🎬 Cinema</span></div><button
+                                class="btn primary full connect-btn">Enviar conexão</button>
+                        </article>
+                    </div>
+                    <p id="empty-state" class="empty-state" hidden>Nenhuma pessoa encontrada com esse filtro.</p>
+                    <p class="small-text muted">Pessoas e compatibilidades fictícias para demonstração do layout.</p>
+                </section>
+                <!-- PERFIL -->
+                <section class="screen" id="perfil-screen">
+                    <header class="topbar">
+                        <div>
+                            <p class="eyebrow">SEU ESPAÇO</p>
+                            <h1>Meu perfil</h1>
+                        </div><button class="btn outline" data-screen="login-screen">Sair</button>
+                    </header>
+                    <section class="profile-hero">
+                        <div class="avatar big">MG</div>
+                        <div><span class="pill">Perfil de demonstração</span>
+                            <h2>Marina Gomes</h2>
+                            <p class="muted">Design · Universidade Exemplo</p>
+                            <p>Gosto de trocar ideias sobre criatividade, música e lugares tranquilos para estudar.</p>
+                        </div>
+                    </section>
+                    <div class="content-grid">
+                        <section class="panel">
+                            <div class="panel-heading">
+                                <h2>Sobre mim</h2><span class="muted small-text">Prévia visual</span>
+                            </div>
+                            <form id="profile-form"><label for="bio">Minha bio</label><textarea id="bio" rows="4"
+                                    maxlength="240">Gosto de trocar ideias sobre criatividade, música e lugares tranquilos para estudar.</textarea><label
+                                    for="curso-perfil">Curso</label><input id="curso-perfil" value="Design"><label
+                                    for="uni-perfil">Universidade</label><input id="uni-perfil"
+                                    value="Universidade Exemplo"><button class="btn primary" type="submit">Salvar
+                                    prévia</button>
+                                <p id="profile-feedback" class="form-note" aria-live="polite"></p>
+                            </form>
+                        </section>
+                        <section class="panel">
+                            <h2>Meus interesses</h2>
+                            <p class="muted">Selecione alguns assuntos que você curte.</p>
+                            <div class="chips selectable"><button type="button" class="chip selected">🎨
+                                    Design</button><button type="button" class="chip">🎵 Música</button><button
+                                    type="button" class="chip selected">📚 Leitura</button><button type="button"
+                                    class="chip">🎮 Jogos</button><button type="button" class="chip">🌿
+                                    Natureza</button><button type="button" class="chip">🎬 Cinema</button><button
+                                    type="button" class="chip">💻 Tecnologia</button><button type="button"
+                                    class="chip">☕ Cafés</button></div>
+                            <p class="muted small-text">As escolhas são demonstrativas e não ficam salvas no banco.</p>
+                        </section>
+                    </div>
+                </section>
+                <!-- CONEXOES -->
+                <section class="screen" id="conexoes-screen">
+                    <header class="topbar">
+                        <div>
+                            <p class="eyebrow">NO SEU RITMO</p>
+                            <h1>Minhas conexões</h1>
+                            <p class="muted">Pessoas com quem você pode começar uma conversa.</p>
+                        </div><button class="btn outline" data-screen="sugestoes-screen">Ver sugestões</button>
+                    </header>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <h2>Conexões aceitas</h2><span class="pill">2 pessoas</span>
+                        </div>
+                        <div class="connection-row">
+                            <div class="avatar purple">LC</div>
+                            <div class="grow"><b>Lucas Costa</b>
+                                <p class="muted">Tecnologia · Música</p>
+                            </div><button class="btn outline" data-screen="mensagens-screen">Mensagem</button>
+                        </div>
+                        <div class="connection-row">
+                            <div class="avatar peach">AR</div>
+                            <div class="grow"><b>Ana Ribeiro</b>
+                                <p class="muted">Design · Cinema</p>
+                            </div><button class="btn outline" data-screen="mensagens-screen">Mensagem</button>
+                        </div>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <h2>Solicitações recebidas</h2><span class="pill">1 nova</span>
+                        </div>
+                        <div class="connection-row" id="request-row">
+                            <div class="avatar green">PM</div>
+                            <div class="grow"><b>Pedro Martins</b>
+                                <p class="muted">Leitura · Música</p>
+                            </div>
+                            <div class="button-pair"><button class="btn primary request-action">Aceitar</button><button
+                                    class="btn outline request-action">Recusar</button></div>
+                        </div>
+                        <p id="request-feedback" class="form-note" aria-live="polite"></p>
+                    </section>
+                </section>
+                <!-- MENSAGENS -->
+                <section class="screen" id="mensagens-screen">
+                    <header class="topbar">
+                        <div>
+                            <p class="eyebrow">CONVERSAS</p>
+                            <h1>Mensagens</h1>
+                            <p class="muted">Uma conversa pode começar com um interesse em comum.</p>
+                        </div>
+                    </header>
+                    <section class="chat-shell">
+                        <aside class="chat-list">
+                            <h2>Conversas</h2><button class="chat-person active"><span
+                                    class="avatar purple">LC</span><span><b>Lucas Costa</b><small>Oi! Também gosto de
+                                        tecnologia.</small></span></button><button class="chat-person"><span
+                                    class="avatar peach">AR</span><span><b>Ana Ribeiro</b><small>Vamos falar sobre
+                                        cinema?</small></span></button>
+                        </aside>
+                        <div class="chat-area">
+                            <div class="chat-header"><span class="avatar purple" id="chat-avatar">LC</span>
+                                <div><b id="chat-name">Lucas Costa</b><small class="muted">Conectado à sua
+                                        comunidade</small></div>
+                            </div>
+                            <div class="chat-messages" id="chat-messages">
+                                <div class="bubble received">Oi! Vi que você também gosta de tecnologia. 😊</div>
+                                <div class="bubble sent">Sim! Estou começando a explorar alguns projetos web.</div>
+                                <div class="bubble received">Que legal! Qual tecnologia você está usando?</div>
+                            </div>
+                            <form class="chat-compose" id="message-form"><input id="message-input"
+                                    placeholder="Escreva uma mensagem..." aria-label="Escreva uma mensagem"
+                                    required><button class="btn primary" type="submit">Enviar</button></form>
+                            <p class="small-text muted chat-disclaimer">Mensagens de exemplo. Nesta etapa, não são
+                                enviadas a outros usuários.</p>
+                        </div>
+                    </section>
+                </section>
+            </main>
+        </div>
+    </div>
+    <script src="js/script.js" defer></script>
+</body>
+
+</html>
