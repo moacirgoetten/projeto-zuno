@@ -1,6 +1,73 @@
+let authenticatedUser = null;
+let csrfToken = '';
+let catalogCourses = [];
+let catalogUniversities = [];
+let catalogInterests = [];
+
+async function api(action, data) {
+    const response = await fetch(`api/auth.php?action=${action}`, {
+        method: data === undefined ? 'GET' : 'POST',
+        credentials: 'same-origin',
+        headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: data === undefined ? undefined : JSON.stringify(data),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Não foi possível concluir a operação.');
+    return result;
+}
+
+function updateIdentity(user) {
+    authenticatedUser = user;
+    const identity = document.querySelector('.side-bottom');
+    identity.querySelector('b').textContent = user ? user.nome : 'Meu espaço';
+    identity.querySelector('small').textContent = user ? 'Conta conectada' : 'Desconectado';
+    identity.querySelector('.avatar').textContent = user ? user.nome.split(/\s+/).slice(0, 2).map(part => part[0]).join('') : 'Z';
+    renderProfile();
+}
+
+function populateProfileCourses(selected = '') {
+    const select = document.getElementById('curso-perfil');
+    select.replaceChildren(new Option('Selecione seu curso', ''));
+    catalogCourses.filter(course => String(course.universidade_id) === document.getElementById('uni-perfil').value)
+        .forEach(course => select.add(new Option(course.nome, course.id)));
+    select.value = String(selected || '');
+}
+
+function renderProfile() {
+    const user = authenticatedUser;
+    document.getElementById('profile-name').textContent = user?.nome || '';
+    document.getElementById('profile-avatar').textContent = user ? user.nome.split(/\s+/).slice(0, 2).map(part => part[0]).join('') : '';
+    document.getElementById('profile-education').textContent = user ? [user.curso, user.universidade].filter(Boolean).join(' · ') : '';
+    document.getElementById('profile-bio').textContent = user ? (user.bio || 'Conte um pouco sobre você na sua bio.') : '';
+    document.getElementById('bio').value = user?.bio || '';
+    const universities = document.getElementById('uni-perfil');
+    universities.replaceChildren(new Option('Selecione sua universidade', ''));
+    catalogUniversities.forEach(item => universities.add(new Option(item.nome, item.id)));
+    universities.value = String(user?.universidade_id || '');
+    populateProfileCourses(user?.curso_id);
+    const chips = document.getElementById('profile-interests');
+    chips.replaceChildren();
+    catalogInterests.forEach(interest => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.dataset.id = interest.id;
+        chip.textContent = interest.nome;
+        const selected = (user?.interesses || []).includes(Number(interest.id));
+        chip.classList.toggle('selected', selected);
+        chip.setAttribute('aria-pressed', String(selected));
+        chips.appendChild(chip);
+    });
+    document.getElementById('profile-feedback').textContent = '';
+    document.querySelector('#profile-form button[type="submit"]').disabled = !user || !catalogCourses.length;
+}
+
+document.getElementById('uni-perfil').addEventListener('change', () => populateProfileCourses());
+
 // Navegação entre as telas do Zuno
 function showScreen(id) {
     const appIds = ['sugestoes-screen', 'perfil-screen', 'conexoes-screen', 'mensagens-screen'];
+    if (appIds.includes(id) && !authenticatedUser) id = 'login-screen';
 
     document.querySelectorAll('body > .screen').forEach(screen => {
         screen.classList.remove('active');
@@ -23,41 +90,132 @@ function showScreen(id) {
 }
 
 // Links e botões de navegação
-document.addEventListener('click', event => {
+document.addEventListener('click', async event => {
     const nav = event.target.closest('[data-screen]');
     if (nav) {
         event.preventDefault();
+        if (nav.dataset.screen === 'login-screen' && authenticatedUser) {
+            try {
+                await api('logout', {});
+                updateIdentity(null);
+                const session = await api('session');
+                csrfToken = session.csrf;
+            } catch (error) {
+                alert(error.message);
+                return;
+            }
+        }
         showScreen(nav.dataset.screen);
     }
 });
 
-// Formulário de login (demonstração, sem autenticação real)
-document.getElementById('login-form').addEventListener('submit', event => {
+// Autenticação real com sessão PHP
+document.getElementById('login-form').addEventListener('submit', async event => {
     event.preventDefault();
-    document.getElementById('login-feedback').textContent =
-        'Prévia: autenticação real será implementada na Semana 3.';
-    showScreen('sugestoes-screen');
+    const button = event.target.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const feedback = document.getElementById('login-feedback');
+    feedback.textContent = 'Entrando...';
+    try {
+        const result = await api('login', { email: document.getElementById('email').value, password: document.getElementById('senha').value });
+        csrfToken = result.csrf;
+        updateIdentity(result.user);
+        event.target.reset();
+        feedback.textContent = '';
+        showScreen('sugestoes-screen');
+    } catch (error) {
+        feedback.textContent = error.message;
+    } finally { button.disabled = false; }
 });
 
-// Formulário de cadastro (demonstração)
-document.getElementById('signup-form').addEventListener('submit', event => {
+document.getElementById('signup-form').addEventListener('submit', async event => {
     event.preventDefault();
-    document.getElementById('signup-feedback').textContent =
-        'Cadastro validado na interface! O salvamento real será implementado na Semana 3.';
+    const button = event.target.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const feedback = document.getElementById('signup-feedback');
+    feedback.textContent = 'Criando conta...';
+    try {
+        await api('signup', {
+            name: document.getElementById('nome').value,
+            email: document.getElementById('email-cadastro').value,
+            password: document.getElementById('senha-cadastro').value,
+            university_id: document.getElementById('universidade').value,
+            course_id: document.getElementById('curso').value,
+            consent: document.getElementById('consentimento').checked,
+        });
+        event.target.reset();
+        populateCourses();
+        feedback.textContent = '';
+        document.getElementById('login-feedback').textContent = 'Conta criada! Entre com seu e-mail e senha.';
+        showScreen('login-screen');
+    } catch (error) { feedback.textContent = error.message; }
+    finally { button.disabled = false; }
 });
 
-// Edição do perfil (demonstração)
-document.getElementById('profile-form').addEventListener('submit', event => {
+function populateCourses() {
+    const select = document.getElementById('curso');
+    select.replaceChildren(new Option('Selecione seu curso', ''));
+    catalogCourses.filter(course => String(course.universidade_id) === document.getElementById('universidade').value)
+        .forEach(course => select.add(new Option(course.nome, course.id)));
+    select.disabled = select.options.length === 1;
+}
+
+document.getElementById('universidade').addEventListener('change', populateCourses);
+
+async function initializeAuth() {
+    document.querySelector('#login-form button[type="submit"]').disabled = true;
+    document.querySelector('#signup-form button[type="submit"]').disabled = true;
+    try {
+        const session = await api('session');
+        csrfToken = session.csrf;
+        updateIdentity(session.user);
+        if (session.user) showScreen('sugestoes-screen');
+        document.querySelector('#login-form button[type="submit"]').disabled = false;
+        const catalog = await api('catalog');
+        catalogCourses = catalog.cursos;
+        catalogUniversities = catalog.universidades;
+        catalogInterests = catalog.interesses;
+        renderProfile();
+        const universities = document.getElementById('universidade');
+        universities.replaceChildren(new Option('Selecione sua universidade', ''));
+        catalog.universidades.forEach(item => universities.add(new Option(item.nome, item.id)));
+        populateCourses();
+        document.querySelector('#signup-form button[type="submit"]').disabled = false;
+    } catch (error) {
+        const message = location.protocol === 'file:' ? 'Abra o projeto pelo servidor PHP, conforme o README.' : error.message;
+        document.getElementById('login-feedback').textContent = message;
+        document.getElementById('signup-feedback').textContent = message;
+    }
+}
+
+initializeAuth();
+
+// Edição do perfil da conta conectada
+document.getElementById('profile-form').addEventListener('submit', async event => {
     event.preventDefault();
-    document.getElementById('profile-feedback').textContent =
-        'Alterações exibidas apenas nesta demonstração; o banco será conectado depois.';
+    const button = event.target.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const feedback = document.getElementById('profile-feedback');
+    feedback.textContent = 'Salvando...';
+    try {
+        const result = await api('profile', {
+            bio: document.getElementById('bio').value,
+            course_id: document.getElementById('curso-perfil').value,
+            university_id: document.getElementById('uni-perfil').value,
+            interests: Array.from(document.querySelectorAll('#profile-interests .selected'), chip => Number(chip.dataset.id)),
+        });
+        updateIdentity(result.user);
+        feedback.textContent = 'Perfil salvo!';
+    } catch (error) { feedback.textContent = error.message; }
+    finally { button.disabled = false; }
 });
 
 // Seleção de interesses
-document.querySelectorAll('.chips.selectable .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-        chip.classList.toggle('selected');
-    });
+document.getElementById('profile-interests').addEventListener('click', event => {
+    const chip = event.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('selected');
+    chip.setAttribute('aria-pressed', String(chip.classList.contains('selected')));
 });
 
 // Busca e filtro de pessoas

@@ -46,9 +46,8 @@
                             <div class="field-wide"><label for="email-cadastro">E-mail universitário</label><input
                                     id="email-cadastro" type="email" placeholder="voce@universidade.edu.br" required>
                             </div>
-                            <div><label for="universidade">Universidade</label><input id="universidade"
-                                    placeholder="Sua universidade" required></div>
-                            <div><label for="curso">Curso</label><input id="curso" placeholder="Seu curso" required>
+                            <div><label for="universidade">Universidade</label><select id="universidade" required><option value="">Carregando universidades...</option></select></div>
+                            <div><label for="curso">Curso</label><select id="curso" required disabled><option value="">Selecione sua universidade</option></select>
                             </div>
                             <div class="field-wide"><label for="senha-cadastro">Crie uma senha</label><input
                                     id="senha-cadastro" type="password" minlength="8"
@@ -144,38 +143,30 @@
                         </div><button class="btn outline" data-screen="login-screen">Sair</button>
                     </header>
                     <section class="profile-hero">
-                        <div class="avatar big">MG</div>
-                        <div><span class="pill">Perfil de demonstração</span>
-                            <h2>Marina Gomes</h2>
-                            <p class="muted">Design · Universidade Exemplo</p>
-                            <p>Gosto de trocar ideias sobre criatividade, música e lugares tranquilos para estudar.</p>
+                        <div class="avatar big" id="profile-avatar"></div>
+                        <div><span class="pill">Meu perfil</span>
+                            <h2 id="profile-name"></h2>
+                            <p class="muted" id="profile-education"></p>
+                            <p id="profile-bio"></p>
                         </div>
                     </section>
                     <div class="content-grid">
                         <section class="panel">
                             <div class="panel-heading">
-                                <h2>Sobre mim</h2><span class="muted small-text">Prévia visual</span>
+                                <h2>Sobre mim</h2><span class="muted small-text">Dados da sua conta</span>
                             </div>
                             <form id="profile-form"><label for="bio">Minha bio</label><textarea id="bio" rows="4"
-                                    maxlength="240">Gosto de trocar ideias sobre criatividade, música e lugares tranquilos para estudar.</textarea><label
-                                    for="curso-perfil">Curso</label><input id="curso-perfil" value="Design"><label
-                                    for="uni-perfil">Universidade</label><input id="uni-perfil"
-                                    value="Universidade Exemplo"><button class="btn primary" type="submit">Salvar
-                                    prévia</button>
+                                    maxlength="500" placeholder="Conte um pouco sobre você"></textarea><label
+                                    for="uni-perfil">Universidade</label><select id="uni-perfil" required></select><label
+                                    for="curso-perfil">Curso</label><select id="curso-perfil" required></select><button class="btn primary" type="submit" disabled>Salvar perfil</button>
                                 <p id="profile-feedback" class="form-note" aria-live="polite"></p>
                             </form>
                         </section>
                         <section class="panel">
                             <h2>Meus interesses</h2>
                             <p class="muted">Selecione alguns assuntos que você curte.</p>
-                            <div class="chips selectable"><button type="button" class="chip selected">🎨
-                                    Design</button><button type="button" class="chip">🎵 Música</button><button
-                                    type="button" class="chip selected">📚 Leitura</button><button type="button"
-                                    class="chip">🎮 Jogos</button><button type="button" class="chip">🌿
-                                    Natureza</button><button type="button" class="chip">🎬 Cinema</button><button
-                                    type="button" class="chip">💻 Tecnologia</button><button type="button"
-                                    class="chip">☕ Cafés</button></div>
-                            <p class="muted small-text">As escolhas são demonstrativas e não ficam salvas no banco.</p>
+                            <div class="chips selectable" id="profile-interests"></div>
+                            <p class="muted small-text">Clique em Salvar perfil para guardar seus interesses e as demais alterações.</p>
                         </section>
                     </div>
                 </section>
@@ -258,7 +249,7 @@
             </main>
         </div>
     </div>
-    <script src="js/script.js" defer></script>
+    <script src="js/script.js?v=3.1" defer></script>
 </body>
 
 </html>
