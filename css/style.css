@@ -855,3 +855,28 @@ select:focus {
     }
 
 }
+.avatar {
+    overflow: hidden
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover
+}
+
+.photo-field {
+    margin-top: 16px;
+    font-size: .85rem
+}
+
+.photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 6px
+}
+
+[hidden] {
+    display: none !important
+}

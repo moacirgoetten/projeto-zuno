@@ -5,24 +5,53 @@ let catalogUniversities = [];
 let catalogInterests = [];
 
 async function api(action, data) {
+    const isForm = data instanceof FormData;
     const response = await fetch(`api/auth.php?action=${action}`, {
         method: data === undefined ? 'GET' : 'POST',
         credentials: 'same-origin',
-        headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: data === undefined ? undefined : JSON.stringify(data),
+        headers: data === undefined ? {} : isForm ? { 'X-CSRF-Token': csrfToken } : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: data === undefined ? undefined : isForm ? data : JSON.stringify(data),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Não foi possível concluir a operação.');
+    // Um erro do PHP fora do JSON não deve quebrar a interface.
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result) throw new Error(result?.error || 'Não foi possível concluir a operação.');
     return result;
+}
+
+function initials(name) {
+    return name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+}
+
+function renderAvatar(element, user, fallback = '') {
+    element.replaceChildren();
+    if (user?.foto) {
+        const image = new Image();
+        image.src = user.foto;
+        image.alt = '';
+        image.addEventListener('error', () => { element.textContent = initials(user.nome); });
+        element.appendChild(image);
+    } else {
+        element.textContent = user ? initials(user.nome) : fallback;
+    }
 }
 
 function updateIdentity(user) {
     authenticatedUser = user;
     const identity = document.querySelector('.side-bottom');
     identity.querySelector('b').textContent = user ? user.nome : 'Meu espaço';
-    identity.querySelector('small').textContent = user ? 'Conta conectada' : 'Desconectado';
-    identity.querySelector('.avatar').textContent = user ? user.nome.split(/\s+/).slice(0, 2).map(part => part[0]).join('') : 'Z';
+    identity.querySelector('small').textContent = user ? (user.curso || 'Conta conectada') : 'Desconectado';
+    document.getElementById('photo-feedback').textContent = '';
+    renderPhoto();
     renderProfile();
+}
+
+// Atualiza só a foto, sem descartar edições ainda não salvas do perfil
+function renderPhoto() {
+    const user = authenticatedUser;
+    renderAvatar(document.querySelector('.side-bottom .avatar'), user, 'Z');
+    renderAvatar(document.getElementById('profile-avatar'), user);
+    document.getElementById('photo-choose').disabled = !user;
+    document.getElementById('photo-remove').hidden = !user?.foto;
 }
 
 function populateProfileCourses(selected = '') {
@@ -36,7 +65,6 @@ function populateProfileCourses(selected = '') {
 function renderProfile() {
     const user = authenticatedUser;
     document.getElementById('profile-name').textContent = user?.nome || '';
-    document.getElementById('profile-avatar').textContent = user ? user.nome.split(/\s+/).slice(0, 2).map(part => part[0]).join('') : '';
     document.getElementById('profile-education').textContent = user ? [user.curso, user.universidade].filter(Boolean).join(' · ') : '';
     document.getElementById('profile-bio').textContent = user ? (user.bio || 'Conte um pouco sobre você na sua bio.') : '';
     document.getElementById('bio').value = user?.bio || '';
@@ -208,6 +236,40 @@ document.getElementById('profile-form').addEventListener('submit', async event =
         feedback.textContent = 'Perfil salvo!';
     } catch (error) { feedback.textContent = error.message; }
     finally { button.disabled = false; }
+});
+
+// Foto de perfil
+async function changePhoto(request) {
+    const feedback = document.getElementById('photo-feedback');
+    const buttons = [document.getElementById('photo-choose'), document.getElementById('photo-remove')];
+    buttons.forEach(button => { button.disabled = true; });
+    feedback.textContent = 'Salvando foto...';
+    try {
+        const result = await request();
+        authenticatedUser = result.user;
+        renderPhoto();
+        feedback.textContent = result.user.foto ? 'Foto atualizada!' : 'Foto removida.';
+    } catch (error) { feedback.textContent = error.message; }
+    finally { buttons.forEach(button => { button.disabled = !authenticatedUser; }); }
+}
+
+document.getElementById('photo-choose').addEventListener('click', () => document.getElementById('photo-input').click());
+
+document.getElementById('photo-input').addEventListener('change', event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+        document.getElementById('photo-feedback').textContent = 'Envie uma imagem JPG, PNG ou WebP de até 2 MB.';
+        return;
+    }
+    const form = new FormData();
+    form.append('photo', file);
+    changePhoto(() => api('photo', form));
+});
+
+document.getElementById('photo-remove').addEventListener('click', () => {
+    if (confirm('Remover sua foto de perfil?')) changePhoto(() => api('photo_remove', {}));
 });
 
 // Seleção de interesses

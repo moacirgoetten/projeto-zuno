@@ -1,2 +1,4 @@
 /config/database.local.php
 
+/uploads/fotos/*
+!/uploads/fotos/.htaccess

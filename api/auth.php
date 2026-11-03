@@ -14,6 +14,10 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
+const PHOTO_DIR = __DIR__ . '/../uploads/fotos';
+const PHOTO_NAME = '/^[a-f0-9]{32}\.(jpg|png|webp)$/';
+const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+
 function respond(array $body, int $status = 200): void
 {
     http_response_code($status);
@@ -40,19 +44,37 @@ function database(): PDO
 function currentUser(PDO $db): ?array
 {
     if (empty($_SESSION['user_id'])) return null;
-    $query = $db->prepare('SELECT u.id, u.nome, u.email, u.bio, u.curso_id, c.nome AS curso, c.universidade_id, v.nome AS universidade FROM usuarios u LEFT JOIN cursos c ON c.id = u.curso_id LEFT JOIN universidades v ON v.id = c.universidade_id WHERE u.id = ? AND u.ativo = 1');
+    $query = $db->prepare('SELECT u.id, u.nome, u.email, u.bio, u.foto_url, u.curso_id, c.nome AS curso, c.universidade_id, v.nome AS universidade FROM usuarios u LEFT JOIN cursos c ON c.id = u.curso_id LEFT JOIN universidades v ON v.id = c.universidade_id WHERE u.id = ? AND u.ativo = 1');
     $query->execute([$_SESSION['user_id']]);
     $user = $query->fetch();
     if (!$user) return null;
+    // A foto é servida pela API, que exige sessão; o nome do arquivo não é exposto.
+    $user['foto'] = $user['foto_url'] ? 'api/auth.php?action=photo&id=' . $user['id'] . '&v=' . substr($user['foto_url'], 0, 8) : null;
+    unset($user['foto_url']);
     $query = $db->prepare('SELECT interesse_id FROM usuario_interesses WHERE usuario_id = ?');
     $query->execute([$user['id']]);
     $user['interesses'] = array_map('intval', $query->fetchAll(PDO::FETCH_COLUMN));
     return $user;
 }
 
+function userPhotos(PDO $db, int $userId): array
+{
+    $query = $db->prepare('SELECT caminho FROM fotos WHERE usuario_id = ? UNION SELECT foto_url FROM usuarios WHERE id = ? AND foto_url IS NOT NULL');
+    $query->execute([$userId, $userId]);
+    return $query->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function deletePhotoFiles(array $names): void
+{
+    foreach ($names as $name) {
+        if (preg_match(PHOTO_NAME, (string) $name) && is_file(PHOTO_DIR . '/' . $name)) unlink(PHOTO_DIR . '/' . $name);
+    }
+}
+
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $action = $_GET['action'] ?? 'session';
 $method = $_SERVER['REQUEST_METHOD'];
+$newPhoto = null;
 
 try {
     if ($method === 'GET' && $action === 'session') {
@@ -67,7 +89,22 @@ try {
             'interesses' => $db->query('SELECT id, nome FROM interesses ORDER BY nome')->fetchAll(),
         ]);
     }
-    if (!in_array($action, ['login', 'signup', 'logout', 'profile'], true)) {
+    if ($method === 'GET' && $action === 'photo') {
+        $db = database();
+        if (!currentUser($db)) respond(['error' => 'Entre para ver fotos de perfil.'], 401);
+        $query = $db->prepare('SELECT foto_url FROM usuarios WHERE id = ? AND ativo = 1');
+        $query->execute([filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT) ?: 0]);
+        $name = (string) $query->fetchColumn();
+        if (!preg_match(PHOTO_NAME, $name, $match) || !is_file(PHOTO_DIR . '/' . $name)) {
+            respond(['error' => 'Foto não encontrada.'], 404);
+        }
+        header('Content-Type: ' . ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'][$match[1]]);
+        header('Content-Length: ' . filesize(PHOTO_DIR . '/' . $name));
+        header('Cache-Control: private, max-age=86400');
+        readfile(PHOTO_DIR . '/' . $name);
+        exit;
+    }
+    if (!in_array($action, ['login', 'signup', 'logout', 'profile', 'photo', 'photo_remove'], true)) {
         respond(['error' => 'Ação inexistente.'], 404);
     }
     if ($method !== 'POST') {
@@ -77,6 +114,34 @@ try {
     if (!hash_equals($_SESSION['csrf'], $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
         respond(['error' => 'Sessão expirada. Recarregue a página.'], 403);
     }
+
+    if ($action === 'photo') {
+        $db = database();
+        $user = currentUser($db);
+        if (!$user) respond(['error' => 'Entre novamente para alterar sua foto.'], 401);
+        // Sem o arquivo em $_FILES, o envio pode ter passado do post_max_size do PHP.
+        $file = $_FILES['photo'] ?? null;
+        $types = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+        $image = is_array($file) && ($file['error'] ?? null) === UPLOAD_ERR_OK && $file['size'] <= PHOTO_MAX_BYTES
+            && is_uploaded_file($file['tmp_name']) ? @getimagesize($file['tmp_name']) : false;
+        if (!$image || !isset($types[$image[2]]) || $image[0] > 4000 || $image[1] > 4000) {
+            respond(['error' => 'Envie uma imagem JPG, PNG ou WebP de até 2 MB e no máximo 4000×4000 pixels.'], 422);
+        }
+        if (!is_dir(PHOTO_DIR) && !mkdir(PHOTO_DIR, 0755, true)) throw new RuntimeException('Pasta de fotos indisponível.');
+        $name = bin2hex(random_bytes(16)) . '.' . $types[$image[2]];
+        if (!move_uploaded_file($file['tmp_name'], PHOTO_DIR . '/' . $name)) throw new RuntimeException('Falha ao gravar a foto.');
+        $newPhoto = $name;
+        $old = userPhotos($db, (int) $user['id']);
+        $db->beginTransaction();
+        $db->prepare('DELETE FROM fotos WHERE usuario_id = ?')->execute([$user['id']]);
+        $db->prepare('INSERT INTO fotos (usuario_id, caminho, principal) VALUES (?, ?, 1)')->execute([$user['id'], $name]);
+        $db->prepare('UPDATE usuarios SET foto_url = ? WHERE id = ?')->execute([$name, $user['id']]);
+        $db->commit();
+        $newPhoto = null;
+        deletePhotoFiles($old);
+        respond(['user' => currentUser($db)]);
+    }
+
     $data = json_decode(file_get_contents('php://input'), true);
     if (!is_array($data)) respond(['error' => 'Dados inválidos.'], 400);
 
@@ -87,6 +152,19 @@ try {
         setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => $cookie['path'],
             'secure' => $cookie['secure'], 'httponly' => true, 'samesite' => 'Lax']);
         respond(['ok' => true]);
+    }
+
+    if ($action === 'photo_remove') {
+        $db = database();
+        $user = currentUser($db);
+        if (!$user) respond(['error' => 'Entre novamente para alterar sua foto.'], 401);
+        $old = userPhotos($db, (int) $user['id']);
+        $db->beginTransaction();
+        $db->prepare('DELETE FROM fotos WHERE usuario_id = ?')->execute([$user['id']]);
+        $db->prepare('UPDATE usuarios SET foto_url = NULL WHERE id = ?')->execute([$user['id']]);
+        $db->commit();
+        deletePhotoFiles($old);
+        respond(['user' => currentUser($db)]);
     }
 
     if ($action === 'profile') {
@@ -164,6 +242,7 @@ try {
     respond(['user' => currentUser($db), 'csrf' => $_SESSION['csrf']]);
 } catch (Throwable $error) {
     if (isset($db) && $db->inTransaction()) $db->rollBack();
+    if ($newPhoto !== null) deletePhotoFiles([$newPhoto]);
     if ($error instanceof PDOException && ($error->errorInfo[1] ?? null) === 1062) {
         respond(['error' => 'Este e-mail já está cadastrado.'], 409);
     }

@@ -1,0 +1,2 @@
+# Fotos são servidas por api/auth.php, que exige sessão.
+Require all denied
