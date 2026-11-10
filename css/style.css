@@ -182,7 +182,9 @@ button {
 }
 
 .auth-card input:not([type=checkbox]),
+.auth-card select,
 .panel input,
+.panel select,
 .panel textarea,
 .searchbox input,
 .toolbar select,
@@ -222,7 +224,7 @@ select:focus {
 
 .form-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0 14px
 }
 
@@ -517,7 +519,7 @@ select:focus {
 
 .content-grid {
     display: grid;
-    grid-template-columns: 1.1fr .9fr;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
     gap: 18px
 }
 
@@ -723,7 +725,7 @@ select:focus {
     }
 
     .content-grid {
-        grid-template-columns: 1fr
+        grid-template-columns: minmax(0, 1fr)
     }
 
     .sidebar {
@@ -824,8 +826,12 @@ select:focus {
         vertical-align: top
     }
 
+    .chat-person span:last-child {
+        min-width: 0
+    }
+
     .chat-person small {
-        max-width: 115px
+        max-width: none
     }
 
     .chat-messages {
@@ -834,7 +840,7 @@ select:focus {
     }
 
     .form-grid {
-        grid-template-columns: 1fr
+        grid-template-columns: minmax(0, 1fr)
     }
 
     .field-wide {
@@ -855,6 +861,13 @@ select:focus {
     }
 
 }
+
+@media(max-width:420px) {
+    .chat-person {
+        width: 100%
+    }
+}
+
 .avatar {
     overflow: hidden
 }

@@ -4,9 +4,9 @@ let catalogCourses = [];
 let catalogUniversities = [];
 let catalogInterests = [];
 
-async function api(action, data) {
+async function api(action, data, endpoint = 'auth') {
     const isForm = data instanceof FormData;
-    const response = await fetch(`api/auth.php?action=${action}`, {
+    const response = await fetch(`api/${endpoint}.php?action=${action}`, {
         method: data === undefined ? 'GET' : 'POST',
         credentials: 'same-origin',
         headers: data === undefined ? {} : isForm ? { 'X-CSRF-Token': csrfToken } : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -36,6 +36,7 @@ function renderAvatar(element, user, fallback = '') {
 }
 
 function updateIdentity(user) {
+    if (user?.id !== authenticatedUser?.id) clearPeople();
     authenticatedUser = user;
     const identity = document.querySelector('.side-bottom');
     identity.querySelector('b').textContent = user ? user.nome : 'Meu espaço';
@@ -112,6 +113,12 @@ function showScreen(id) {
         document.querySelectorAll('.sidebar nav button').forEach(button => {
             button.classList.toggle('active', button.dataset.screen === id);
         });
+    }
+
+    if (id === 'sugestoes-screen') loadSuggestions();
+    if (id === 'conexoes-screen') {
+        document.getElementById('connections-feedback').textContent = '';
+        loadConnections();
     }
 
     window.scrollTo(0, 0);
@@ -204,6 +211,8 @@ async function initializeAuth() {
         catalogUniversities = catalog.universidades;
         catalogInterests = catalog.interesses;
         renderProfile();
+        const interestFilter = document.getElementById('interest-filter');
+        catalog.interesses.forEach(item => interestFilter.add(new Option(item.nome, item.id)));
         const universities = document.getElementById('universidade');
         universities.replaceChildren(new Option('Selecione sua universidade', ''));
         catalog.universidades.forEach(item => universities.add(new Option(item.nome, item.id)));
@@ -284,43 +293,179 @@ document.getElementById('profile-interests').addEventListener('click', event => 
 function filterPeople() {
     const term = document.getElementById('people-search').value.trim().toLocaleLowerCase('pt-BR');
     const interest = document.getElementById('interest-filter').value;
+    const cards = document.querySelectorAll('.person-card');
     let shown = 0;
 
-    document.querySelectorAll('.person-card').forEach(card => {
-        const text = (card.dataset.name + ' ' + card.dataset.interests + ' ' + card.innerText)
-            .toLocaleLowerCase('pt-BR');
-        const matches = text.includes(term) &&
+    cards.forEach(card => {
+        const matches = card.dataset.search.includes(term) &&
             (!interest || card.dataset.interests.split(' ').includes(interest));
 
         card.hidden = !matches;
         if (matches) shown++;
     });
 
-    document.getElementById('empty-state').hidden = shown !== 0;
+    const empty = document.getElementById('empty-state');
+    empty.textContent = cards.length
+        ? 'Nenhuma pessoa encontrada com esse filtro.'
+        : 'Ainda não há novas sugestões na sua universidade. Volte mais tarde!';
+    empty.hidden = shown !== 0;
 }
 
 document.getElementById('people-search').addEventListener('input', filterPeople);
 document.getElementById('interest-filter').addEventListener('change', filterPeople);
 
-// Envio de solicitação de conexão (demonstração)
-document.querySelectorAll('.connect-btn').forEach(button => {
-    button.addEventListener('click', () => {
+// Sugestões e conexões vindas do banco
+const AVATAR_COLORS = ['purple', 'peach', 'green'];
+
+function connectionsApi(action, data) {
+    return api(action, data, 'conexoes');
+}
+
+function createElement(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+}
+
+function createAvatar(person) {
+    const avatar = createElement('div', `avatar ${AVATAR_COLORS[person.id % AVATAR_COLORS.length]}`);
+    renderAvatar(avatar, person);
+    return avatar;
+}
+
+function createSuggestionCard(person) {
+    const card = createElement('article', 'person-card');
+    card.dataset.search = [person.nome, ...person.interesses.map(item => item.nome)].join(' ').toLocaleLowerCase('pt-BR');
+    card.dataset.interests = person.interesses.map(item => item.id).join(' ');
+
+    const match = person.em_comum > 0 ? `● ${person.em_comum} em comum` : person.mesmo_curso ? '● Mesmo curso' : '● Mesma universidade';
+    const top = createElement('div', 'person-top');
+    top.append(createAvatar(person), createElement('span', 'match', match));
+
+    const chips = createElement('div', 'chips');
+    const mine = authenticatedUser.interesses;
+    person.interesses.forEach(item => {
+        chips.appendChild(createElement('span', mine.includes(item.id) ? 'chip selected' : 'chip', item.nome));
+    });
+
+    const button = createElement('button', 'btn primary full connect-btn', 'Enviar conexão');
+    button.dataset.id = person.id;
+    card.append(top, createElement('h2', '', person.nome), createElement('p', 'muted', person.curso),
+        createElement('p', 'person-bio', person.bio || 'Esta pessoa ainda não escreveu uma bio.'), chips, button);
+    return card;
+}
+
+async function loadSuggestions() {
+    const userId = authenticatedUser?.id;
+    const feedback = document.getElementById('suggestions-feedback');
+    feedback.textContent = '';
+    try {
+        const result = await connectionsApi('suggestions');
+        if (authenticatedUser?.id !== userId) return;
+        document.getElementById('people-grid').replaceChildren(...result.sugestoes.map(createSuggestionCard));
+        filterPeople();
+    } catch (error) {
+        if (authenticatedUser?.id === userId) feedback.textContent = error.message;
+    }
+}
+
+document.getElementById('people-grid').addEventListener('click', async event => {
+    const button = event.target.closest('.connect-btn');
+    if (!button) return;
+    const feedback = document.getElementById('suggestions-feedback');
+    button.disabled = true;
+    feedback.textContent = '';
+    try {
+        await connectionsApi('request', { id: Number(button.dataset.id) });
         button.textContent = 'Solicitação enviada ✓';
-        button.disabled = true;
         button.classList.remove('primary');
         button.classList.add('outline');
-    });
+    } catch (error) {
+        feedback.textContent = error.message;
+        button.disabled = false;
+    }
 });
 
-// Aceitar ou recusar solicitação (demonstração)
-document.querySelectorAll('.request-action').forEach(button => {
-    button.addEventListener('click', () => {
-        document.getElementById('request-row').remove();
-        document.getElementById('request-feedback').textContent =
-            button.textContent === 'Aceitar'
-                ? 'Solicitação aceita na demonstração.'
-                : 'Solicitação recusada na demonstração.';
-    });
+function createButton(label, style, dataset) {
+    const button = createElement('button', `btn ${style}`, label);
+    button.type = 'button';
+    Object.assign(button.dataset, dataset);
+    return button;
+}
+
+function createConnectionRow(person, buttons) {
+    const row = createElement('div', 'connection-row');
+    const info = createElement('div', 'grow');
+    const interests = person.interesses.slice(0, 3).map(item => item.nome).join(' · ');
+    info.append(createElement('b', '', person.nome), createElement('p', 'muted', interests || person.curso || ''));
+    const actions = createElement('div', 'button-pair');
+    actions.append(...buttons);
+    row.append(createAvatar(person), info, actions);
+    return row;
+}
+
+function renderConnectionList(listId, countId, items, countLabel, emptyText, createButtons) {
+    const list = document.getElementById(listId);
+    list.replaceChildren(...(items.length
+        ? items.map(item => createConnectionRow(item.usuario, createButtons(item)))
+        : [createElement('p', 'muted small-text', emptyText)]));
+    document.getElementById(countId).textContent = countLabel(items.length);
+}
+
+function connectionAction(action, item) {
+    return { connectionAction: action, id: item.id, name: item.usuario.nome };
+}
+
+async function loadConnections() {
+    const userId = authenticatedUser?.id;
+    try {
+        const result = await connectionsApi('list');
+        if (authenticatedUser?.id !== userId) return;
+        renderConnectionList('received-list', 'received-count', result.recebidas,
+            total => `${total} ${total === 1 ? 'nova' : 'novas'}`, 'Nenhuma solicitação aguardando sua resposta.',
+            item => [createButton('Aceitar', 'primary', connectionAction('accept', item)),
+                createButton('Recusar', 'outline', connectionAction('decline', item))]);
+        renderConnectionList('accepted-list', 'accepted-count', result.conexoes,
+            total => `${total} ${total === 1 ? 'pessoa' : 'pessoas'}`, 'Você ainda não tem conexões. Comece pelas sugestões!',
+            item => [createButton('Mensagem', 'outline', { screen: 'mensagens-screen' }),
+                createButton('Remover', 'outline', connectionAction('remove', item))]);
+        renderConnectionList('sent-list', 'sent-count', result.enviadas,
+            total => `${total} ${total === 1 ? 'enviada' : 'enviadas'}`, 'Nenhuma solicitação aguardando resposta.',
+            item => [createButton('Cancelar', 'outline', connectionAction('remove', item))]);
+    } catch (error) {
+        if (authenticatedUser?.id === userId) document.getElementById('connections-feedback').textContent = error.message;
+    }
+}
+
+function clearPeople() {
+    ['people-grid', 'received-list', 'accepted-list', 'sent-list'].forEach(id => document.getElementById(id).replaceChildren());
+    ['received-count', 'accepted-count', 'sent-count'].forEach(id => { document.getElementById(id).textContent = ''; });
+    document.getElementById('empty-state').hidden = true;
+}
+
+const CONNECTION_MESSAGES = {
+    accept: { done: name => `Agora você e ${name} estão conectados.` },
+    decline: { ask: name => `Recusar a solicitação de ${name}? Essa pessoa não voltará às suas sugestões.`, done: name => `Solicitação de ${name} recusada.` },
+    remove: { ask: name => `Remover ou cancelar o vínculo com ${name}?`, done: name => `Vínculo com ${name} encerrado.` },
+};
+
+document.getElementById('conexoes-screen').addEventListener('click', async event => {
+    const button = event.target.closest('[data-connection-action]');
+    if (!button) return;
+    const { connectionAction: action, id, name } = button.dataset;
+    const messages = CONNECTION_MESSAGES[action];
+    if (messages.ask && !confirm(messages.ask(name))) return;
+    const feedback = document.getElementById('connections-feedback');
+    button.disabled = true;
+    try {
+        await connectionsApi(action, { id: Number(id) });
+        feedback.textContent = messages.done(name);
+        await loadConnections();
+    } catch (error) {
+        feedback.textContent = error.message;
+        button.disabled = false;
+    }
 });
 
 // Envio de mensagens no chat (somente na interface)

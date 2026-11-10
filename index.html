@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Zuno — Protótipo navegável</title>
-    <link rel="stylesheet" href="css/style.css?v=4.0">
+    <link rel="stylesheet" href="css/style.css?v=5.0">
 </head>
 
 <body>
@@ -89,50 +89,11 @@
                                 placeholder="Buscar por nome ou interesse..." aria-label="Buscar pessoas"></div><select
                             id="interest-filter" aria-label="Filtrar por interesse">
                             <option value="">Todos os interesses</option>
-                            <option>Design</option>
-                            <option>Música</option>
-                            <option>Leitura</option>
-                            <option>Tecnologia</option>
-                            <option>Cinema</option>
                         </select>
                     </section>
-                    <div class="people-grid" id="people-grid">
-                        <article class="person-card" data-name="Lucas Costa" data-interests="Tecnologia Música Jogos">
-                            <div class="person-top">
-                                <div class="avatar purple">LC</div><span class="match">● 3 em comum</span>
-                            </div>
-                            <h2>Lucas Costa</h2>
-                            <p class="muted">Ciência da Computação · 2º semestre</p>
-                            <p class="person-bio">Curioso por tecnologia, música ao vivo e projetos criativos.</p>
-                            <div class="chips"><span class="chip">💻 Tecnologia</span><span class="chip">🎵
-                                    Música</span><span class="chip">🎮 Jogos</span></div><button
-                                class="btn primary full connect-btn">Enviar conexão</button>
-                        </article>
-                        <article class="person-card" data-name="Ana Ribeiro" data-interests="Design Cinema Leitura">
-                            <div class="person-top">
-                                <div class="avatar peach">AR</div><span class="match">● 2 em comum</span>
-                            </div>
-                            <h2>Ana Ribeiro</h2>
-                            <p class="muted">Design · 3º semestre</p>
-                            <p class="person-bio">Adoro ilustração, cinema independente e boas conversas.</p>
-                            <div class="chips"><span class="chip">🎨 Design</span><span class="chip">🎬
-                                    Cinema</span><span class="chip">📚 Leitura</span></div><button
-                                class="btn primary full connect-btn">Enviar conexão</button>
-                        </article>
-                        <article class="person-card" data-name="Pedro Martins" data-interests="Música Leitura Cinema">
-                            <div class="person-top">
-                                <div class="avatar green">PM</div><span class="match">● 2 em comum</span>
-                            </div>
-                            <h2>Pedro Martins</h2>
-                            <p class="muted">Jornalismo · 1º semestre</p>
-                            <p class="person-bio">Leitor de ficção, fã de música e explorador de cafeterias.</p>
-                            <div class="chips"><span class="chip">📚 Leitura</span><span class="chip">🎵
-                                    Música</span><span class="chip">🎬 Cinema</span></div><button
-                                class="btn primary full connect-btn">Enviar conexão</button>
-                        </article>
-                    </div>
-                    <p id="empty-state" class="empty-state" hidden>Nenhuma pessoa encontrada com esse filtro.</p>
-                    <p class="small-text muted">Pessoas e compatibilidades fictícias para demonstração do layout.</p>
+                    <p id="suggestions-feedback" class="form-note" aria-live="polite"></p>
+                    <div class="people-grid" id="people-grid"></div>
+                    <p id="empty-state" class="empty-state" hidden></p>
                 </section>
                 <!-- PERFIL -->
                 <section class="screen" id="perfil-screen">
@@ -186,36 +147,24 @@
                             <p class="muted">Pessoas com quem você pode começar uma conversa.</p>
                         </div><button class="btn outline" data-screen="sugestoes-screen">Ver sugestões</button>
                     </header>
+                    <p id="connections-feedback" class="form-note" aria-live="polite"></p>
                     <section class="panel">
                         <div class="panel-heading">
-                            <h2>Conexões aceitas</h2><span class="pill">2 pessoas</span>
+                            <h2>Solicitações recebidas</h2><span class="pill" id="received-count"></span>
                         </div>
-                        <div class="connection-row">
-                            <div class="avatar purple">LC</div>
-                            <div class="grow"><b>Lucas Costa</b>
-                                <p class="muted">Tecnologia · Música</p>
-                            </div><button class="btn outline" data-screen="mensagens-screen">Mensagem</button>
-                        </div>
-                        <div class="connection-row">
-                            <div class="avatar peach">AR</div>
-                            <div class="grow"><b>Ana Ribeiro</b>
-                                <p class="muted">Design · Cinema</p>
-                            </div><button class="btn outline" data-screen="mensagens-screen">Mensagem</button>
-                        </div>
+                        <div id="received-list"></div>
                     </section>
                     <section class="panel">
                         <div class="panel-heading">
-                            <h2>Solicitações recebidas</h2><span class="pill">1 nova</span>
+                            <h2>Conexões aceitas</h2><span class="pill" id="accepted-count"></span>
                         </div>
-                        <div class="connection-row" id="request-row">
-                            <div class="avatar green">PM</div>
-                            <div class="grow"><b>Pedro Martins</b>
-                                <p class="muted">Leitura · Música</p>
-                            </div>
-                            <div class="button-pair"><button class="btn primary request-action">Aceitar</button><button
-                                    class="btn outline request-action">Recusar</button></div>
+                        <div id="accepted-list"></div>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <h2>Solicitações enviadas</h2><span class="pill" id="sent-count"></span>
                         </div>
-                        <p id="request-feedback" class="form-note" aria-live="polite"></p>
+                        <div id="sent-list"></div>
                     </section>
                 </section>
                 <!-- MENSAGENS -->
@@ -256,7 +205,7 @@
             </main>
         </div>
     </div>
-    <script src="js/script.js?v=4.0" defer></script>
+    <script src="js/script.js?v=5.0" defer></script>
 </body>
 
 </html>
