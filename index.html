@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Zuno — Protótipo navegável</title>
+    <title>Zuno</title>
     <link rel="stylesheet" href="css/style.css?v=5.0">
 </head>
 
@@ -12,49 +12,46 @@
     <!-- TELA LOGIN -->
     <section class="screen auth-screen active" id="login-screen">
         <main class="auth-page">
-            <div class="auth-shell"><a class="brand" href="#" data-screen="login-screen"><span
-                        class="brand-mark">z</span><span>zuno</span></a>
+            <div class="auth-shell">
+                <a class="brand" href="#" data-screen="login-screen"><span class="brand-mark">z</span><span>zuno</span></a>
                 <section class="auth-card">
                     <p class="eyebrow">SEU CAMPUS, SUA COMUNIDADE</p>
                     <h1>Conexões começam<br>por interesses.</h1>
                     <p class="muted">Encontre pessoas da sua universidade no seu ritmo.</p>
-                    <form id="login-form"><label for="email">E-mail universitário</label><input id="email" type="email"
-                            placeholder="voce@universidade.edu.br" required><label for="senha">Senha</label><input
-                            id="senha" type="password" placeholder="Sua senha" required><button class="btn primary full"
-                            type="submit">Entrar</button></form>
+                    <form id="login-form">
+                        <label for="email">E-mail universitário</label>
+                        <input id="email" type="email" placeholder="voce@universidade.edu.br" required>
+                        <label for="senha">Senha</label>
+                        <input id="senha" type="password" placeholder="Sua senha" required>
+                        <button class="btn primary full" type="submit">Entrar</button>
+                    </form>
                     <p class="form-note" id="login-feedback" aria-live="polite"></p>
-                    <p class="center muted">Ainda não tem conta? <a href="#" data-screen="cadastro-screen">Criar
-                            cadastro</a></p>
+                    <p class="center muted">Ainda não tem conta? <a href="#" data-screen="cadastro-screen">Criar cadastro</a></p>
                 </section>
                 <p class="footer-note">Um espaço leve para conhecer gente parecida com você.</p>
             </div>
         </main>
     </section>
+
     <!-- TELA CADASTRO -->
     <section class="screen auth-screen" id="cadastro-screen">
         <main class="auth-page">
-            <div class="auth-shell"><a class="brand" href="#" data-screen="login-screen"><span
-                        class="brand-mark">z</span><span>zuno</span></a>
+            <div class="auth-shell">
+                <a class="brand" href="#" data-screen="login-screen"><span class="brand-mark">z</span><span>zuno</span></a>
                 <section class="auth-card">
                     <p class="eyebrow">VAMOS COMEÇAR</p>
                     <h1>Crie seu espaço.</h1>
                     <p class="muted">Você decide como e quando começar uma conversa.</p>
                     <form id="signup-form">
                         <div class="form-grid">
-                            <div class="field-wide"><label for="nome">Nome</label><input id="nome"
-                                    placeholder="Como podemos te chamar?" required></div>
-                            <div class="field-wide"><label for="email-cadastro">E-mail universitário</label><input
-                                    id="email-cadastro" type="email" placeholder="voce@universidade.edu.br" required>
-                            </div>
-                            <div><label for="universidade">Universidade</label><select id="universidade" required><option value="">Carregando universidades...</option></select></div>
-                            <div><label for="curso">Curso</label><select id="curso" required disabled><option value="">Selecione sua universidade</option></select>
-                            </div>
-                            <div class="field-wide"><label for="senha-cadastro">Crie uma senha</label><input
-                                    id="senha-cadastro" type="password" minlength="8"
-                                    placeholder="Mínimo de 8 caracteres" required></div>
-                        </div><label class="checkline"><input type="checkbox" id="consentimento" required> Li e aceito o
-                            uso dos meus dados para funcionamento do Zuno.</label><button class="btn primary full"
-                            type="submit">Criar minha conta</button>
+                            <div class="field-wide"><label for="nome">Nome</label><input id="nome" maxlength="120" placeholder="Como podemos te chamar?" required></div>
+                            <div class="field-wide"><label for="email-cadastro">E-mail universitário</label><input id="email-cadastro" type="email" placeholder="voce@universidade.edu.br" required></div>
+                            <div><label for="universidade">Universidade</label><select id="universidade" required></select></div>
+                            <div><label for="curso">Curso</label><select id="curso" required></select></div>
+                            <div class="field-wide"><label for="senha-cadastro">Crie uma senha</label><input id="senha-cadastro" type="password" minlength="8" maxlength="72" placeholder="Mínimo de 8 caracteres" required></div>
+                        </div>
+                        <label class="checkline"><input type="checkbox" id="consentimento" required> Li e aceito o uso dos meus dados para funcionamento do Zuno.</label>
+                        <button class="btn primary full" type="submit">Criar minha conta</button>
                     </form>
                     <p id="signup-feedback" class="form-note" aria-live="polite"></p>
                     <p class="center muted">Já tem conta? <a href="#" data-screen="login-screen">Entrar</a></p>
@@ -62,46 +59,49 @@
             </div>
         </main>
     </section>
-    <!-- ÁREA PRINCIPAL COM NAVEGAÇÃO ENTRE 4 TELAS -->
+
+    <!-- ÁREA PRINCIPAL (só para quem está conectado) -->
     <div class="screen" id="app-screen">
         <div class="app-layout">
-            <aside class="sidebar"><a class="brand" href="#" data-screen="sugestoes-screen"><span
-                        class="brand-mark">z</span><span>zuno</span></a>
-                <nav><button class="active" data-screen="sugestoes-screen">◈ <span>Sugestões</span></button><button
-                        data-screen="perfil-screen">◎ <span>Meu perfil</span></button><button
-                        data-screen="conexoes-screen">♡ <span>Conexões</span></button><button
-                        data-screen="mensagens-screen">▤ <span>Mensagens</span></button></nav>
-                <div class="side-bottom"><span class="avatar small">MG</span><span><b>Meu
-                            espaço</b><small>Protótipo</small></span></div>
+            <aside class="sidebar">
+                <a class="brand" href="#" data-screen="sugestoes-screen"><span class="brand-mark">z</span><span>zuno</span></a>
+                <nav>
+                    <button data-screen="sugestoes-screen">◈ <span>Sugestões</span></button>
+                    <button data-screen="perfil-screen">◎ <span>Meu perfil</span></button>
+                    <button data-screen="conexoes-screen">♡ <span>Conexões</span></button>
+                    <button data-screen="mensagens-screen">▤ <span>Mensagens</span></button>
+                    <button data-screen="notificacoes-screen">🔔 <span>Notificações</span> <b class="badge" id="notif-count" hidden></b></button>
+                </nav>
+                <div class="side-bottom"><span class="avatar small" id="side-avatar"></span><span><b id="side-name"></b><small id="side-course"></small></span></div>
             </aside>
             <main class="main-content">
-                <!-- SUGESTOES -->
-                <section class="screen active" id="sugestoes-screen">
+                <!-- SUGESTÕES -->
+                <section class="screen" id="sugestoes-screen">
                     <header class="topbar">
                         <div>
                             <p class="eyebrow">GENTE QUE COMBINA COM VOCÊ</p>
                             <h1>Descubra suas conexões</h1>
-                            <p class="muted">Interesses em comum podem ser um ótimo começo.</p>
-                        </div><button class="btn outline" data-screen="login-screen">Sair</button>
+                            <p class="muted">Pessoas da sua universidade com mais interesses em comum aparecem primeiro.</p>
+                        </div>
+                        <button class="btn outline" data-screen="login-screen">Sair</button>
                     </header>
                     <section class="toolbar">
-                        <div class="searchbox"><span>⌕</span><input id="people-search"
-                                placeholder="Buscar por nome ou interesse..." aria-label="Buscar pessoas"></div><select
-                            id="interest-filter" aria-label="Filtrar por interesse">
-                            <option value="">Todos os interesses</option>
-                        </select>
+                        <div class="searchbox"><span>⌕</span><input id="people-search" placeholder="Buscar por nome, curso ou interesse..." aria-label="Buscar pessoas"></div>
+                        <select id="interest-filter" aria-label="Filtrar por interesse"></select>
                     </section>
-                    <p id="suggestions-feedback" class="form-note" aria-live="polite"></p>
+                    <p id="people-feedback" class="form-note" aria-live="polite"></p>
                     <div class="people-grid" id="people-grid"></div>
-                    <p id="empty-state" class="empty-state" hidden></p>
+                    <p id="empty-state" class="empty-state" hidden>Nenhuma pessoa encontrada.</p>
                 </section>
+
                 <!-- PERFIL -->
                 <section class="screen" id="perfil-screen">
                     <header class="topbar">
                         <div>
                             <p class="eyebrow">SEU ESPAÇO</p>
                             <h1>Meu perfil</h1>
-                        </div><button class="btn outline" data-screen="login-screen">Sair</button>
+                        </div>
+                        <button class="btn outline" data-screen="login-screen">Sair</button>
                     </header>
                     <section class="profile-hero">
                         <div class="avatar big" id="profile-avatar"></div>
@@ -113,20 +113,21 @@
                     </section>
                     <div class="content-grid">
                         <section class="panel">
-                            <div class="panel-heading">
-                                <h2>Sobre mim</h2><span class="muted small-text">Dados da sua conta</span>
-                            </div>
+                            <div class="panel-heading"><h2>Sobre mim</h2><span class="muted small-text">Dados da sua conta</span></div>
                             <div class="photo-field"><b>Foto de perfil</b>
-                                <div class="photo-actions"><button class="btn outline" type="button" id="photo-choose" disabled>Escolher foto</button><button
-                                        class="btn outline" type="button" id="photo-remove" hidden>Remover foto</button></div>
+                                <div class="photo-actions">
+                                    <button class="btn outline" type="button" id="photo-choose">Escolher foto</button>
+                                    <button class="btn outline" type="button" id="photo-remove" hidden>Remover foto</button>
+                                </div>
                                 <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
                                 <p class="muted small-text">JPG, PNG ou WebP de até 2 MB.</p>
                                 <p id="photo-feedback" class="form-note" aria-live="polite"></p>
                             </div>
-                            <form id="profile-form"><label for="bio">Minha bio</label><textarea id="bio" rows="4"
-                                    maxlength="500" placeholder="Conte um pouco sobre você"></textarea><label
-                                    for="uni-perfil">Universidade</label><select id="uni-perfil" required></select><label
-                                    for="curso-perfil">Curso</label><select id="curso-perfil" required></select><button class="btn primary" type="submit" disabled>Salvar perfil</button>
+                            <form id="profile-form">
+                                <label for="bio">Minha bio</label><textarea id="bio" rows="4" maxlength="500" placeholder="Conte um pouco sobre você"></textarea>
+                                <label for="uni-perfil">Universidade</label><select id="uni-perfil" required></select>
+                                <label for="curso-perfil">Curso</label><select id="curso-perfil" required></select>
+                                <button class="btn primary" type="submit">Salvar perfil</button>
                                 <p id="profile-feedback" class="form-note" aria-live="polite"></p>
                             </form>
                         </section>
@@ -134,73 +135,66 @@
                             <h2>Meus interesses</h2>
                             <p class="muted">Selecione alguns assuntos que você curte.</p>
                             <div class="chips selectable" id="profile-interests"></div>
-                            <p class="muted small-text">Clique em Salvar perfil para guardar seus interesses e as demais alterações.</p>
+                            <p class="muted small-text">Clique em Salvar perfil para guardar seus interesses.</p>
+                        </section>
+                        <section class="panel">
+                            <h2>Privacidade</h2>
+                            <p class="muted">Excluir a conta apaga para sempre seu perfil, foto, conexões, mensagens e notificações.</p>
+                            <form id="delete-form">
+                                <label for="delete-password">Confirme sua senha</label><input id="delete-password" type="password" required>
+                                <button class="btn outline" type="submit">Excluir minha conta</button>
+                                <p id="delete-feedback" class="form-note" aria-live="polite"></p>
+                            </form>
                         </section>
                     </div>
                 </section>
-                <!-- CONEXOES -->
+
+                <!-- CONEXÕES -->
                 <section class="screen" id="conexoes-screen">
                     <header class="topbar">
                         <div>
                             <p class="eyebrow">NO SEU RITMO</p>
                             <h1>Minhas conexões</h1>
                             <p class="muted">Pessoas com quem você pode começar uma conversa.</p>
-                        </div><button class="btn outline" data-screen="sugestoes-screen">Ver sugestões</button>
+                        </div>
+                        <button class="btn outline" data-screen="sugestoes-screen">Ver sugestões</button>
                     </header>
-                    <p id="connections-feedback" class="form-note" aria-live="polite"></p>
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <h2>Solicitações recebidas</h2><span class="pill" id="received-count"></span>
-                        </div>
-                        <div id="received-list"></div>
-                    </section>
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <h2>Conexões aceitas</h2><span class="pill" id="accepted-count"></span>
-                        </div>
-                        <div id="accepted-list"></div>
-                    </section>
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <h2>Solicitações enviadas</h2><span class="pill" id="sent-count"></span>
-                        </div>
-                        <div id="sent-list"></div>
-                    </section>
+                    <section class="panel"><div class="panel-heading"><h2>Solicitações recebidas</h2></div><div id="received-list"></div></section>
+                    <section class="panel"><div class="panel-heading"><h2>Conexões aceitas</h2></div><div id="accepted-list"></div></section>
+                    <section class="panel"><div class="panel-heading"><h2>Solicitações enviadas</h2></div><div id="sent-list"></div></section>
                 </section>
+
                 <!-- MENSAGENS -->
                 <section class="screen" id="mensagens-screen">
                     <header class="topbar">
                         <div>
                             <p class="eyebrow">CONVERSAS</p>
                             <h1>Mensagens</h1>
-                            <p class="muted">Uma conversa pode começar com um interesse em comum.</p>
+                            <p class="muted">Você conversa apenas com suas conexões aceitas.</p>
                         </div>
                     </header>
                     <section class="chat-shell">
-                        <aside class="chat-list">
-                            <h2>Conversas</h2><button class="chat-person active"><span
-                                    class="avatar purple">LC</span><span><b>Lucas Costa</b><small>Oi! Também gosto de
-                                        tecnologia.</small></span></button><button class="chat-person"><span
-                                    class="avatar peach">AR</span><span><b>Ana Ribeiro</b><small>Vamos falar sobre
-                                        cinema?</small></span></button>
-                        </aside>
+                        <aside class="chat-list"><h2>Conversas</h2><div id="chat-list"></div></aside>
                         <div class="chat-area">
-                            <div class="chat-header"><span class="avatar purple" id="chat-avatar">LC</span>
-                                <div><b id="chat-name">Lucas Costa</b><small class="muted">Conectado à sua
-                                        comunidade</small></div>
-                            </div>
-                            <div class="chat-messages" id="chat-messages">
-                                <div class="bubble received">Oi! Vi que você também gosta de tecnologia. 😊</div>
-                                <div class="bubble sent">Sim! Estou começando a explorar alguns projetos web.</div>
-                                <div class="bubble received">Que legal! Qual tecnologia você está usando?</div>
-                            </div>
-                            <form class="chat-compose" id="message-form"><input id="message-input"
-                                    placeholder="Escreva uma mensagem..." aria-label="Escreva uma mensagem"
-                                    required><button class="btn primary" type="submit">Enviar</button></form>
-                            <p class="small-text muted chat-disclaimer">Mensagens de exemplo. Nesta etapa, não são
-                                enviadas a outros usuários.</p>
+                            <div class="chat-header"><span class="avatar" id="chat-avatar"></span><b id="chat-name">Escolha uma conversa</b></div>
+                            <div class="chat-messages" id="chat-messages"></div>
+                            <form class="chat-compose" id="message-form">
+                                <input id="message-input" maxlength="1000" placeholder="Escreva uma mensagem..." aria-label="Escreva uma mensagem" required disabled>
+                                <button class="btn primary" type="submit" disabled>Enviar</button>
+                            </form>
                         </div>
                     </section>
+                </section>
+
+                <!-- NOTIFICAÇÕES -->
+                <section class="screen" id="notificacoes-screen">
+                    <header class="topbar">
+                        <div>
+                            <p class="eyebrow">NOVIDADES</p>
+                            <h1>Notificações</h1>
+                        </div>
+                    </header>
+                    <section class="panel" id="notif-list"></section>
                 </section>
             </main>
         </div>

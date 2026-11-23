@@ -1,504 +1,377 @@
-let authenticatedUser = null;
-let csrfToken = '';
-let catalogCourses = [];
-let catalogUniversities = [];
-let catalogInterests = [];
+// Estado da aplicação
+let me = null;           // usuário conectado (null = desconectado)
+let csrf = '';           // token enviado em todo POST (proteção CSRF)
+let catalog = { universidades: [], cursos: [], interesses: [] };
+let people = [];         // sugestões carregadas
+let connections = [];    // conexões e solicitações carregadas
+let chatId = null;       // conexão da conversa aberta
+let lastCount = -1;      // quantidade de mensagens já desenhadas
 
-async function api(action, data, endpoint = 'auth') {
-    const isForm = data instanceof FormData;
-    const response = await fetch(`api/${endpoint}.php?action=${action}`, {
-        method: data === undefined ? 'GET' : 'POST',
-        credentials: 'same-origin',
-        headers: data === undefined ? {} : isForm ? { 'X-CSRF-Token': csrfToken } : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: data === undefined ? undefined : isForm ? data : JSON.stringify(data),
+const $ = id => document.getElementById(id);
+const active = id => $(id).classList.contains('active');
+
+// Chama a API PHP. Sem dados é GET; com dados é POST com o token CSRF.
+async function api(action, data, file = 'auth') {
+    const form = data instanceof FormData;
+    const response = await fetch(`api/${file}.php?action=${action}`, data === undefined ? {} : {
+        method: 'POST',
+        headers: form ? { 'X-CSRF-Token': csrf } : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: form ? data : JSON.stringify(data),
     });
-    // Um erro do PHP fora do JSON não deve quebrar a interface.
     const result = await response.json().catch(() => null);
+    if (response.status === 401 && me) { setUser(null); show('login-screen'); } // sessão expirou
     if (!response.ok || !result) throw new Error(result?.error || 'Não foi possível concluir a operação.');
     return result;
 }
+const social = (action, data) => api(action, data, 'social');
 
-function initials(name) {
-    return name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+// Cria um elemento. textContent nunca interpreta HTML, o que impede XSS com dados de usuários.
+function el(tag, cls = '', text = '', data = {}) {
+    const e = document.createElement(tag);
+    e.className = cls;
+    e.textContent = text;
+    Object.assign(e.dataset, data);
+    return e;
 }
 
-function renderAvatar(element, user, fallback = '') {
-    element.replaceChildren();
+const initials = name => name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+
+// Mostra a foto da pessoa ou, sem foto, as iniciais do nome.
+function avatar(user, box = el('span', 'avatar')) {
+    box.textContent = user ? initials(user.nome) : '';
     if (user?.foto) {
-        const image = new Image();
-        image.src = user.foto;
-        image.alt = '';
-        image.addEventListener('error', () => { element.textContent = initials(user.nome); });
-        element.appendChild(image);
-    } else {
-        element.textContent = user ? initials(user.nome) : fallback;
+        const img = new Image();
+        img.src = user.foto;
+        img.alt = '';
+        img.onerror = () => { box.textContent = initials(user.nome); };
+        box.replaceChildren(img);
     }
+    return box;
 }
 
-function updateIdentity(user) {
-    if (user?.id !== authenticatedUser?.id) clearPeople();
-    authenticatedUser = user;
-    const identity = document.querySelector('.side-bottom');
-    identity.querySelector('b').textContent = user ? user.nome : 'Meu espaço';
-    identity.querySelector('small').textContent = user ? (user.curso || 'Conta conectada') : 'Desconectado';
-    document.getElementById('photo-feedback').textContent = '';
-    renderPhoto();
-    renderProfile();
+function fillSelect(select, items, placeholder, value = '') {
+    select.replaceChildren(new Option(placeholder, ''), ...items.map(item => new Option(item.nome, item.id)));
+    select.value = value ?? '';
 }
 
-// Atualiza só a foto, sem descartar edições ainda não salvas do perfil
-function renderPhoto() {
-    const user = authenticatedUser;
-    renderAvatar(document.querySelector('.side-bottom .avatar'), user, 'Z');
-    renderAvatar(document.getElementById('profile-avatar'), user);
-    document.getElementById('photo-choose').disabled = !user;
-    document.getElementById('photo-remove').hidden = !user?.foto;
+// Só mostra os cursos da universidade escolhida.
+function fillCourses(uni, course, value) {
+    fillSelect(course, catalog.cursos.filter(c => String(c.universidade_id) === uni.value), 'Selecione seu curso', value);
 }
 
-function populateProfileCourses(selected = '') {
-    const select = document.getElementById('curso-perfil');
-    select.replaceChildren(new Option('Selecione seu curso', ''));
-    catalogCourses.filter(course => String(course.universidade_id) === document.getElementById('uni-perfil').value)
-        .forEach(course => select.add(new Option(course.nome, course.id)));
-    select.value = String(selected || '');
-}
+// ---------- Navegação ----------
+const appScreens = ['sugestoes-screen', 'perfil-screen', 'conexoes-screen', 'mensagens-screen', 'notificacoes-screen'];
+const loaders = {
+    'sugestoes-screen': () => loadPeople(),
+    'perfil-screen': () => fillProfileForm(),
+    'conexoes-screen': () => loadConnections(),
+    'mensagens-screen': () => loadConnections(),
+    'notificacoes-screen': () => loadNotifications(),
+};
 
-function renderProfile() {
-    const user = authenticatedUser;
-    document.getElementById('profile-name').textContent = user?.nome || '';
-    document.getElementById('profile-education').textContent = user ? [user.curso, user.universidade].filter(Boolean).join(' · ') : '';
-    document.getElementById('profile-bio').textContent = user ? (user.bio || 'Conte um pouco sobre você na sua bio.') : '';
-    document.getElementById('bio').value = user?.bio || '';
-    const universities = document.getElementById('uni-perfil');
-    universities.replaceChildren(new Option('Selecione sua universidade', ''));
-    catalogUniversities.forEach(item => universities.add(new Option(item.nome, item.id)));
-    universities.value = String(user?.universidade_id || '');
-    populateProfileCourses(user?.curso_id);
-    const chips = document.getElementById('profile-interests');
-    chips.replaceChildren();
-    catalogInterests.forEach(interest => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'chip';
-        chip.dataset.id = interest.id;
-        chip.textContent = interest.nome;
-        const selected = (user?.interesses || []).includes(Number(interest.id));
-        chip.classList.toggle('selected', selected);
-        chip.setAttribute('aria-pressed', String(selected));
-        chips.appendChild(chip);
-    });
-    document.getElementById('profile-feedback').textContent = '';
-    document.querySelector('#profile-form button[type="submit"]').disabled = !user || !catalogCourses.length;
-}
-
-document.getElementById('uni-perfil').addEventListener('change', () => populateProfileCourses());
-
-// Navegação entre as telas do Zuno
-function showScreen(id) {
-    const appIds = ['sugestoes-screen', 'perfil-screen', 'conexoes-screen', 'mensagens-screen'];
-    if (appIds.includes(id) && !authenticatedUser) id = 'login-screen';
-
-    document.querySelectorAll('body > .screen').forEach(screen => {
-        screen.classList.remove('active');
-    });
-
-    const authOrApp = appIds.includes(id) ? 'app-screen' : id;
-    const parent = document.getElementById(authOrApp);
-    if (parent) parent.classList.add('active');
-
-    if (appIds.includes(id)) {
-        document.querySelectorAll('#app-screen .main-content > .screen').forEach(screen => {
-            screen.classList.toggle('active', screen.id === id);
-        });
-        document.querySelectorAll('.sidebar nav button').forEach(button => {
-            button.classList.toggle('active', button.dataset.screen === id);
-        });
-    }
-
-    if (id === 'sugestoes-screen') loadSuggestions();
-    if (id === 'conexoes-screen') {
-        document.getElementById('connections-feedback').textContent = '';
-        loadConnections();
-    }
-
+function show(id) {
+    if (appScreens.includes(id) && !me) id = 'login-screen';
+    const parent = appScreens.includes(id) ? 'app-screen' : id;
+    document.querySelectorAll('body > .screen').forEach(s => s.classList.toggle('active', s.id === parent));
+    document.querySelectorAll('.main-content > .screen').forEach(s => s.classList.toggle('active', s.id === id));
+    document.querySelectorAll('.sidebar nav button').forEach(b => b.classList.toggle('active', b.dataset.screen === id));
     window.scrollTo(0, 0);
+    // Cada tela busca dados atualizados do servidor ao ser aberta.
+    if (loaders[id]) Promise.resolve(loaders[id]()).catch(error => alert(error.message));
 }
 
-// Links e botões de navegação
-document.addEventListener('click', async event => {
-    const nav = event.target.closest('[data-screen]');
-    if (nav) {
+// ---------- Conta ----------
+function setUser(user) {
+    me = user;
+    if (!user) closeChat();
+    $('side-name').textContent = user?.nome || '';
+    $('side-course').textContent = user?.curso || '';
+    avatar(user, $('side-avatar'));
+    avatar(user, $('profile-avatar'));
+    $('photo-remove').hidden = !user?.foto;
+    $('profile-name').textContent = user?.nome || '';
+    $('profile-education').textContent = user ? [user.curso, user.universidade].filter(Boolean).join(' · ') : '';
+    $('profile-bio').textContent = user?.bio || 'Conte um pouco sobre você na sua bio.';
+}
+
+function fillProfileForm() {
+    $('bio').value = me.bio || '';
+    fillSelect($('uni-perfil'), catalog.universidades, 'Selecione sua universidade', me.universidade_id);
+    fillCourses($('uni-perfil'), $('curso-perfil'), me.curso_id);
+    $('profile-interests').replaceChildren(...catalog.interesses.map(i => {
+        const chip = el('button', 'chip', i.nome, { id: i.id });
+        chip.type = 'button';
+        chip.classList.toggle('selected', me.interesses.includes(i.id));
+        return chip;
+    }));
+    $('profile-feedback').textContent = '';
+}
+
+async function logout() {
+    await api('logout', {});
+    setUser(null);
+    csrf = (await api('session')).csrf; // a sessão nova tem outro token
+}
+
+// Envia um formulário: desativa o botão, mostra o retorno e trata erros.
+function onSubmit(formId, feedbackId, work) {
+    $(formId).addEventListener('submit', async event => {
         event.preventDefault();
-        if (nav.dataset.screen === 'login-screen' && authenticatedUser) {
-            try {
-                await api('logout', {});
-                updateIdentity(null);
-                const session = await api('session');
-                csrfToken = session.csrf;
-            } catch (error) {
-                alert(error.message);
-                return;
-            }
-        }
-        showScreen(nav.dataset.screen);
-    }
-});
-
-// Autenticação real com sessão PHP
-document.getElementById('login-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const button = event.target.querySelector('button[type="submit"]');
-    button.disabled = true;
-    const feedback = document.getElementById('login-feedback');
-    feedback.textContent = 'Entrando...';
-    try {
-        const result = await api('login', { email: document.getElementById('email').value, password: document.getElementById('senha').value });
-        csrfToken = result.csrf;
-        updateIdentity(result.user);
-        event.target.reset();
-        feedback.textContent = '';
-        showScreen('sugestoes-screen');
-    } catch (error) {
-        feedback.textContent = error.message;
-    } finally { button.disabled = false; }
-});
-
-document.getElementById('signup-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const button = event.target.querySelector('button[type="submit"]');
-    button.disabled = true;
-    const feedback = document.getElementById('signup-feedback');
-    feedback.textContent = 'Criando conta...';
-    try {
-        await api('signup', {
-            name: document.getElementById('nome').value,
-            email: document.getElementById('email-cadastro').value,
-            password: document.getElementById('senha-cadastro').value,
-            university_id: document.getElementById('universidade').value,
-            course_id: document.getElementById('curso').value,
-            consent: document.getElementById('consentimento').checked,
-        });
-        event.target.reset();
-        populateCourses();
-        feedback.textContent = '';
-        document.getElementById('login-feedback').textContent = 'Conta criada! Entre com seu e-mail e senha.';
-        showScreen('login-screen');
-    } catch (error) { feedback.textContent = error.message; }
-    finally { button.disabled = false; }
-});
-
-function populateCourses() {
-    const select = document.getElementById('curso');
-    select.replaceChildren(new Option('Selecione seu curso', ''));
-    catalogCourses.filter(course => String(course.universidade_id) === document.getElementById('universidade').value)
-        .forEach(course => select.add(new Option(course.nome, course.id)));
-    select.disabled = select.options.length === 1;
+        const button = event.target.querySelector('button');
+        button.disabled = true;
+        $(feedbackId).textContent = 'Aguarde...';
+        try { $(feedbackId).textContent = await work(event.target) || ''; }
+        catch (error) { $(feedbackId).textContent = error.message; }
+        finally { button.disabled = false; }
+    });
 }
 
-document.getElementById('universidade').addEventListener('change', populateCourses);
-
-async function initializeAuth() {
-    document.querySelector('#login-form button[type="submit"]').disabled = true;
-    document.querySelector('#signup-form button[type="submit"]').disabled = true;
-    try {
-        const session = await api('session');
-        csrfToken = session.csrf;
-        updateIdentity(session.user);
-        if (session.user) showScreen('sugestoes-screen');
-        document.querySelector('#login-form button[type="submit"]').disabled = false;
-        const catalog = await api('catalog');
-        catalogCourses = catalog.cursos;
-        catalogUniversities = catalog.universidades;
-        catalogInterests = catalog.interesses;
-        renderProfile();
-        const interestFilter = document.getElementById('interest-filter');
-        catalog.interesses.forEach(item => interestFilter.add(new Option(item.nome, item.id)));
-        const universities = document.getElementById('universidade');
-        universities.replaceChildren(new Option('Selecione sua universidade', ''));
-        catalog.universidades.forEach(item => universities.add(new Option(item.nome, item.id)));
-        populateCourses();
-        document.querySelector('#signup-form button[type="submit"]').disabled = false;
-    } catch (error) {
-        const message = location.protocol === 'file:' ? 'Abra o projeto pelo servidor PHP, conforme o README.' : error.message;
-        document.getElementById('login-feedback').textContent = message;
-        document.getElementById('signup-feedback').textContent = message;
-    }
-}
-
-initializeAuth();
-
-// Edição do perfil da conta conectada
-document.getElementById('profile-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const button = event.target.querySelector('button[type="submit"]');
-    button.disabled = true;
-    const feedback = document.getElementById('profile-feedback');
-    feedback.textContent = 'Salvando...';
-    try {
-        const result = await api('profile', {
-            bio: document.getElementById('bio').value,
-            course_id: document.getElementById('curso-perfil').value,
-            university_id: document.getElementById('uni-perfil').value,
-            interests: Array.from(document.querySelectorAll('#profile-interests .selected'), chip => Number(chip.dataset.id)),
-        });
-        updateIdentity(result.user);
-        feedback.textContent = 'Perfil salvo!';
-    } catch (error) { feedback.textContent = error.message; }
-    finally { button.disabled = false; }
+onSubmit('login-form', 'login-feedback', async form => {
+    const result = await api('login', { email: $('email').value, password: $('senha').value });
+    csrf = result.csrf;
+    setUser(result.user);
+    form.reset();
+    show('sugestoes-screen');
 });
 
-// Foto de perfil
+onSubmit('signup-form', 'signup-feedback', async form => {
+    await api('signup', {
+        name: $('nome').value, email: $('email-cadastro').value, password: $('senha-cadastro').value,
+        university_id: $('universidade').value, course_id: $('curso').value, consent: $('consentimento').checked,
+    });
+    form.reset();
+    fillCourses($('universidade'), $('curso'));
+    $('login-feedback').textContent = 'Conta criada! Entre com seu e-mail e senha.';
+    show('login-screen');
+});
+
+onSubmit('profile-form', 'profile-feedback', async () => {
+    const result = await api('profile', {
+        bio: $('bio').value, university_id: $('uni-perfil').value, course_id: $('curso-perfil').value,
+        interests: [...document.querySelectorAll('#profile-interests .selected')].map(chip => Number(chip.dataset.id)),
+    });
+    setUser(result.user);
+    fillProfileForm();
+    return 'Perfil salvo!';
+});
+
+onSubmit('delete-form', 'delete-feedback', async form => {
+    if (!confirm('Excluir sua conta para sempre? Isso não pode ser desfeito.')) return;
+    await api('delete_account', { password: $('delete-password').value });
+    form.reset();
+    setUser(null);
+    csrf = (await api('session')).csrf;
+    $('login-feedback').textContent = 'Sua conta foi excluída.';
+    show('login-screen');
+});
+
+$('profile-interests').addEventListener('click', e => e.target.closest('.chip')?.classList.toggle('selected'));
+$('universidade').addEventListener('change', () => fillCourses($('universidade'), $('curso')));
+$('uni-perfil').addEventListener('change', () => fillCourses($('uni-perfil'), $('curso-perfil')));
+
+// ---------- Foto de perfil ----------
 async function changePhoto(request) {
-    const feedback = document.getElementById('photo-feedback');
-    const buttons = [document.getElementById('photo-choose'), document.getElementById('photo-remove')];
-    buttons.forEach(button => { button.disabled = true; });
-    feedback.textContent = 'Salvando foto...';
+    $('photo-feedback').textContent = 'Salvando foto...';
     try {
-        const result = await request();
-        authenticatedUser = result.user;
-        renderPhoto();
-        feedback.textContent = result.user.foto ? 'Foto atualizada!' : 'Foto removida.';
-    } catch (error) { feedback.textContent = error.message; }
-    finally { buttons.forEach(button => { button.disabled = !authenticatedUser; }); }
+        setUser((await request).user);
+        $('photo-feedback').textContent = me.foto ? 'Foto atualizada!' : 'Foto removida.';
+    } catch (error) { $('photo-feedback').textContent = error.message; }
 }
 
-document.getElementById('photo-choose').addEventListener('click', () => document.getElementById('photo-input').click());
-
-document.getElementById('photo-input').addEventListener('change', event => {
-    const file = event.target.files[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
-        document.getElementById('photo-feedback').textContent = 'Envie uma imagem JPG, PNG ou WebP de até 2 MB.';
-        return;
-    }
+$('photo-choose').addEventListener('click', () => $('photo-input').click());
+$('photo-input').addEventListener('change', e => {
     const form = new FormData();
-    form.append('photo', file);
-    changePhoto(() => api('photo', form));
+    if (!e.target.files[0]) return;
+    form.append('photo', e.target.files[0]);
+    e.target.value = '';
+    changePhoto(api('photo', form));
 });
+$('photo-remove').addEventListener('click', () => confirm('Remover sua foto de perfil?') && changePhoto(api('photo_remove', {})));
 
-document.getElementById('photo-remove').addEventListener('click', () => {
-    if (confirm('Remover sua foto de perfil?')) changePhoto(() => api('photo_remove', {}));
-});
-
-// Seleção de interesses
-document.getElementById('profile-interests').addEventListener('click', event => {
-    const chip = event.target.closest('.chip');
-    if (!chip) return;
-    chip.classList.toggle('selected');
-    chip.setAttribute('aria-pressed', String(chip.classList.contains('selected')));
-});
-
-// Busca e filtro de pessoas
-function filterPeople() {
-    const term = document.getElementById('people-search').value.trim().toLocaleLowerCase('pt-BR');
-    const interest = document.getElementById('interest-filter').value;
-    const cards = document.querySelectorAll('.person-card');
-    let shown = 0;
-
-    cards.forEach(card => {
-        const matches = card.dataset.search.includes(term) &&
-            (!interest || card.dataset.interests.split(' ').includes(interest));
-
-        card.hidden = !matches;
-        if (matches) shown++;
-    });
-
-    const empty = document.getElementById('empty-state');
-    empty.textContent = cards.length
-        ? 'Nenhuma pessoa encontrada com esse filtro.'
-        : 'Ainda não há novas sugestões na sua universidade. Volte mais tarde!';
-    empty.hidden = shown !== 0;
+// ---------- Sugestões (Sprint 5) ----------
+async function loadPeople() {
+    people = (await social('suggestions')).people;
+    renderPeople();
 }
 
-document.getElementById('people-search').addEventListener('input', filterPeople);
-document.getElementById('interest-filter').addEventListener('change', filterPeople);
-
-// Sugestões e conexões vindas do banco
-const AVATAR_COLORS = ['purple', 'peach', 'green'];
-
-function connectionsApi(action, data) {
-    return api(action, data, 'conexoes');
+// Busca e filtro acontecem no navegador, sobre a lista já carregada.
+function renderPeople() {
+    const term = $('people-search').value.trim().toLowerCase();
+    const interest = $('interest-filter').value;
+    const list = people.filter(p => [p.nome, p.curso, p.interesses].join(' ').toLowerCase().includes(term)
+        && (!interest || (p.interesses || '').split(', ').includes(interest)));
+    $('people-grid').replaceChildren(...list.map(personCard));
+    $('empty-state').hidden = list.length > 0;
 }
 
-function createElement(tag, className, text) {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = text;
-    return element;
+function chips(person) {
+    const box = el('div', 'chips');
+    box.append(...(person.interesses || '').split(', ').filter(Boolean).map(name => el('span', 'chip', name)));
+    return box;
 }
 
-function createAvatar(person) {
-    const avatar = createElement('div', `avatar ${AVATAR_COLORS[person.id % AVATAR_COLORS.length]}`);
-    renderAvatar(avatar, person);
-    return avatar;
-}
-
-function createSuggestionCard(person) {
-    const card = createElement('article', 'person-card');
-    card.dataset.search = [person.nome, ...person.interesses.map(item => item.nome)].join(' ').toLocaleLowerCase('pt-BR');
-    card.dataset.interests = person.interesses.map(item => item.id).join(' ');
-
-    const match = person.em_comum > 0 ? `● ${person.em_comum} em comum` : person.mesmo_curso ? '● Mesmo curso' : '● Mesma universidade';
-    const top = createElement('div', 'person-top');
-    top.append(createAvatar(person), createElement('span', 'match', match));
-
-    const chips = createElement('div', 'chips');
-    const mine = authenticatedUser.interesses;
-    person.interesses.forEach(item => {
-        chips.appendChild(createElement('span', mine.includes(item.id) ? 'chip selected' : 'chip', item.nome));
-    });
-
-    const button = createElement('button', 'btn primary full connect-btn', 'Enviar conexão');
-    button.dataset.id = person.id;
-    card.append(top, createElement('h2', '', person.nome), createElement('p', 'muted', person.curso),
-        createElement('p', 'person-bio', person.bio || 'Esta pessoa ainda não escreveu uma bio.'), chips, button);
+function personCard(p) {
+    const card = el('article', 'person-card');
+    const top = el('div', 'person-top');
+    top.append(avatar(p), el('span', 'match', `● ${p.comuns} em comum`));
+    card.append(top, el('h2', '', p.nome), el('p', 'muted', p.curso || ''), el('p', 'person-bio', p.bio || ''), chips(p),
+        el('button', 'btn primary full', 'Enviar conexão', { act: 'connect', id: p.id }),
+        el('button', 'btn outline full', 'Denunciar', { act: 'report', id: p.id }));
     return card;
 }
 
-async function loadSuggestions() {
-    const userId = authenticatedUser?.id;
-    const feedback = document.getElementById('suggestions-feedback');
-    feedback.textContent = '';
-    try {
-        const result = await connectionsApi('suggestions');
-        if (authenticatedUser?.id !== userId) return;
-        document.getElementById('people-grid').replaceChildren(...result.sugestoes.map(createSuggestionCard));
-        filterPeople();
-    } catch (error) {
-        if (authenticatedUser?.id === userId) feedback.textContent = error.message;
-    }
+$('people-search').addEventListener('input', renderPeople);
+$('interest-filter').addEventListener('change', renderPeople);
+
+// ---------- Conexões (Sprint 5) ----------
+function row(c, ...buttons) {
+    const line = el('div', 'connection-row');
+    const info = el('div', 'grow');
+    info.append(el('b', '', c.nome), el('p', 'muted', [c.curso, c.interesses].filter(Boolean).join(' · ')));
+    const pair = el('div', 'button-pair');
+    pair.append(...buttons);
+    line.append(avatar(c), info, pair);
+    return line;
 }
 
-document.getElementById('people-grid').addEventListener('click', async event => {
-    const button = event.target.closest('.connect-btn');
-    if (!button) return;
-    const feedback = document.getElementById('suggestions-feedback');
-    button.disabled = true;
-    feedback.textContent = '';
-    try {
-        await connectionsApi('request', { id: Number(button.dataset.id) });
-        button.textContent = 'Solicitação enviada ✓';
-        button.classList.remove('primary');
-        button.classList.add('outline');
-    } catch (error) {
-        feedback.textContent = error.message;
-        button.disabled = false;
-    }
-});
+const button = (text, act, id, cls = 'outline') => el('button', 'btn ' + cls, text, { act, id });
 
-function createButton(label, style, dataset) {
-    const button = createElement('button', `btn ${style}`, label);
-    button.type = 'button';
-    Object.assign(button.dataset, dataset);
-    return button;
-}
-
-function createConnectionRow(person, buttons) {
-    const row = createElement('div', 'connection-row');
-    const info = createElement('div', 'grow');
-    const interests = person.interesses.slice(0, 3).map(item => item.nome).join(' · ');
-    info.append(createElement('b', '', person.nome), createElement('p', 'muted', interests || person.curso || ''));
-    const actions = createElement('div', 'button-pair');
-    actions.append(...buttons);
-    row.append(createAvatar(person), info, actions);
-    return row;
-}
-
-function renderConnectionList(listId, countId, items, countLabel, emptyText, createButtons) {
-    const list = document.getElementById(listId);
-    list.replaceChildren(...(items.length
-        ? items.map(item => createConnectionRow(item.usuario, createButtons(item)))
-        : [createElement('p', 'muted small-text', emptyText)]));
-    document.getElementById(countId).textContent = countLabel(items.length);
-}
-
-function connectionAction(action, item) {
-    return { connectionAction: action, id: item.id, name: item.usuario.nome };
+function fillList(id, items, make) {
+    $(id).replaceChildren(...(items.length ? items.map(make) : [el('p', 'muted', 'Nada por aqui ainda.')]));
 }
 
 async function loadConnections() {
-    const userId = authenticatedUser?.id;
+    connections = (await social('connections')).connections;
+    const accepted = connections.filter(c => c.status === 'aceita');
+    fillList('received-list', connections.filter(c => c.status === 'pendente' && !c.enviada),
+        c => row(c, button('Aceitar', 'accept', c.conexao_id, 'primary'), button('Recusar', 'decline', c.conexao_id)));
+    fillList('sent-list', connections.filter(c => c.status === 'pendente' && c.enviada),
+        c => row(c, button('Cancelar', 'remove', c.conexao_id)));
+    fillList('accepted-list', accepted, c => row(c, button('Mensagem', 'chat', c.conexao_id, 'primary'),
+        button('Desfazer', 'remove', c.conexao_id), button('Denunciar', 'report', c.id)));
+    fillList('chat-list', accepted, c => {
+        const item = el('button', 'chat-person' + (c.conexao_id === chatId ? ' active' : ''), '', { act: 'chat', id: c.conexao_id });
+        const text = el('span');
+        text.append(el('b', '', c.nome + (c.nao_lidas ? ` (${c.nao_lidas})` : '')), el('small', '', c.ultima || 'Diga oi!'));
+        item.append(avatar(c), text);
+        return item;
+    });
+    if (chatId && !accepted.some(c => c.conexao_id === chatId)) closeChat(); // a conexão foi desfeita
+}
+
+// ---------- Mensagens (Sprint 6) ----------
+function closeChat() {
+    chatId = null;
+    $('chat-name').textContent = 'Escolha uma conversa';
+    avatar(null, $('chat-avatar'));
+    $('chat-messages').replaceChildren();
+    $('message-input').disabled = $('message-form').querySelector('button').disabled = true;
+}
+
+async function openChat(id) {
+    chatId = id;
+    lastCount = -1;
+    const c = connections.find(c => c.conexao_id === id);
+    $('chat-name').textContent = c.nome;
+    avatar(c, $('chat-avatar'));
+    $('message-input').disabled = $('message-form').querySelector('button').disabled = false;
+    show('mensagens-screen');
+    await loadMessages();
+}
+
+async function loadMessages() {
+    const id = chatId;
+    const { messages } = await social(`messages&id=${id}`);
+    if (id !== chatId || messages.length === lastCount) return; // trocou de conversa ou nada novo
+    lastCount = messages.length;
+    const box = $('chat-messages');
+    box.replaceChildren(...messages.map(m => el('div', m.minha ? 'bubble sent' : 'bubble received', m.conteudo)));
+    box.scrollTop = box.scrollHeight;
+}
+
+$('message-form').addEventListener('submit', async event => {
+    event.preventDefault();
     try {
-        const result = await connectionsApi('list');
-        if (authenticatedUser?.id !== userId) return;
-        renderConnectionList('received-list', 'received-count', result.recebidas,
-            total => `${total} ${total === 1 ? 'nova' : 'novas'}`, 'Nenhuma solicitação aguardando sua resposta.',
-            item => [createButton('Aceitar', 'primary', connectionAction('accept', item)),
-                createButton('Recusar', 'outline', connectionAction('decline', item))]);
-        renderConnectionList('accepted-list', 'accepted-count', result.conexoes,
-            total => `${total} ${total === 1 ? 'pessoa' : 'pessoas'}`, 'Você ainda não tem conexões. Comece pelas sugestões!',
-            item => [createButton('Mensagem', 'outline', { screen: 'mensagens-screen' }),
-                createButton('Remover', 'outline', connectionAction('remove', item))]);
-        renderConnectionList('sent-list', 'sent-count', result.enviadas,
-            total => `${total} ${total === 1 ? 'enviada' : 'enviadas'}`, 'Nenhuma solicitação aguardando resposta.',
-            item => [createButton('Cancelar', 'outline', connectionAction('remove', item))]);
-    } catch (error) {
-        if (authenticatedUser?.id === userId) document.getElementById('connections-feedback').textContent = error.message;
+        await social('send', { id: chatId, text: $('message-input').value });
+        $('message-input').value = '';
+        await loadMessages();
+    } catch (error) { alert(error.message); }
+});
+
+// ---------- Notificações (Sprint 6) ----------
+async function loadNotifications() {
+    const { notifications } = await social('notifications');
+    const unread = notifications.filter(n => !n.lida).length;
+    $('notif-count').textContent = unread;
+    $('notif-count').hidden = !unread;
+    fillList('notif-list', notifications, n => {
+        const line = el('p', n.lida ? 'muted' : '', n.mensagem);
+        line.append(el('small', '', n.quando));
+        return line;
+    });
+    // Abrir a tela de notificações marca todas como lidas.
+    if (unread && active('notificacoes-screen')) {
+        await social('read_notifications', {});
+        $('notif-count').hidden = true;
     }
 }
 
-function clearPeople() {
-    ['people-grid', 'received-list', 'accepted-list', 'sent-list'].forEach(id => document.getElementById(id).replaceChildren());
-    ['received-count', 'accepted-count', 'sent-count'].forEach(id => { document.getElementById(id).textContent = ''; });
-    document.getElementById('empty-state').hidden = true;
-}
-
-const CONNECTION_MESSAGES = {
-    accept: { done: name => `Agora você e ${name} estão conectados.` },
-    decline: { ask: name => `Recusar a solicitação de ${name}? Essa pessoa não voltará às suas sugestões.`, done: name => `Solicitação de ${name} recusada.` },
-    remove: { ask: name => `Remover ou cancelar o vínculo com ${name}?`, done: name => `Vínculo com ${name} encerrado.` },
+// ---------- Botões das listas (um só ouvinte para todos) ----------
+// data-act diz a ação; data-id é o id da pessoa (connect/report) ou da conexão (demais).
+const actions = {
+    connect: async id => {
+        await social('connect', { user_id: id });
+        $('people-feedback').textContent = 'Solicitação enviada! Acompanhe em Conexões.';
+        await loadPeople();
+    },
+    accept: id => social('answer', { id, accept: true }).then(loadConnections),
+    decline: id => social('answer', { id, accept: false }).then(loadConnections),
+    remove: id => confirm('Tem certeza? As mensagens desta conexão serão apagadas.') && social('remove', { id }).then(loadConnections),
+    chat: id => openChat(id),
+    report: async id => {
+        const reason = prompt('Conte o motivo da denúncia. A pessoa também será bloqueada para você.');
+        if (!reason) return;
+        await social('report', { user_id: id, reason });
+        alert('Denúncia registrada. Obrigado por ajudar a manter o Zuno seguro.');
+        await Promise.all([loadPeople(), loadConnections()]);
+    },
 };
 
-document.getElementById('conexoes-screen').addEventListener('click', async event => {
-    const button = event.target.closest('[data-connection-action]');
-    if (!button) return;
-    const { connectionAction: action, id, name } = button.dataset;
-    const messages = CONNECTION_MESSAGES[action];
-    if (messages.ask && !confirm(messages.ask(name))) return;
-    const feedback = document.getElementById('connections-feedback');
-    button.disabled = true;
+document.addEventListener('click', async event => {
+    const nav = event.target.closest('[data-screen]');
+    const act = event.target.closest('[data-act]');
     try {
-        await connectionsApi(action, { id: Number(id) });
-        feedback.textContent = messages.done(name);
-        await loadConnections();
+        if (nav) {
+            event.preventDefault();
+            if (nav.dataset.screen === 'login-screen' && me) await logout();
+            show(nav.dataset.screen);
+        }
+        if (act) await actions[act.dataset.act](Number(act.dataset.id));
+    } catch (error) { alert(error.message); }
+});
+
+// ---------- Início ----------
+async function init() {
+    try {
+        const session = await api('session');
+        csrf = session.csrf;
+        catalog = await api('catalog');
+        fillSelect($('universidade'), catalog.universidades, 'Selecione sua universidade');
+        fillCourses($('universidade'), $('curso'));
+        fillSelect($('interest-filter'), catalog.interesses.map(i => ({ id: i.nome, nome: i.nome })), 'Todos os interesses');
+        setUser(session.user);
+        if (me) show('sugestoes-screen');
     } catch (error) {
-        feedback.textContent = error.message;
-        button.disabled = false;
+        $('login-feedback').textContent = location.protocol === 'file:' ? 'Abra o projeto pelo servidor PHP, conforme o README.' : error.message;
     }
-});
+}
 
-// Envio de mensagens no chat (somente na interface)
-document.getElementById('message-form').addEventListener('submit', event => {
-    event.preventDefault();
-    const input = document.getElementById('message-input');
-    const message = input.value.trim();
-    if (!message) return;
+// A cada 5 segundos busca notificações e, na tela de mensagens, conversas novas.
+setInterval(() => {
+    if (!me) return;
+    loadNotifications().catch(() => {});
+    if (active('mensagens-screen')) loadConnections().then(() => chatId && loadMessages()).catch(() => {});
+}, 5000);
 
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble sent';
-    bubble.textContent = message;
-    document.getElementById('chat-messages').appendChild(bubble);
-    input.value = '';
-    bubble.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-});
-
-// Troca da pessoa selecionada no chat
-document.querySelectorAll('.chat-person').forEach(button => {
-    button.addEventListener('click', () => {
-        document.querySelectorAll('.chat-person').forEach(person => {
-            person.classList.remove('active');
-        });
-
-        button.classList.add('active');
-        const name = button.querySelector('b').textContent;
-        document.getElementById('chat-name').textContent = name;
-        document.getElementById('chat-avatar').textContent = name
-            .split(' ')
-            .map(part => part[0])
-            .slice(0, 2)
-            .join('');
-        document.getElementById('chat-messages').innerHTML =
-            '<div class="bubble received">Olá! Que bom ter você por aqui. Vamos conversar sobre nossos interesses em comum? 😊</div>';
-    });
-});
+closeChat();
+init();

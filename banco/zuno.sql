@@ -1,5 +1,5 @@
--- Zuno - estrutura inicial de demonstração (11 tabelas)
--- Importar no phpMyAdmin. Ajuste com o modelo oficial da disciplina quando estiver disponível.
+-- Zuno - banco de dados (11 tabelas). Importar uma única vez no phpMyAdmin.
+-- Relações com ON DELETE CASCADE: ao excluir um usuário, os dados ligados a ele também são apagados.
 CREATE DATABASE IF NOT EXISTS zuno CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE zuno;
 
@@ -103,11 +103,54 @@ CREATE TABLE consentimentos (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Catálogo inicial: universidades reais e interesses.
 INSERT INTO universidades (nome, sigla) VALUES
-('Universidade Exemplo','UE'), ('Universidade Comunitária','UC');
+('Universidade de São Paulo', 'USP'),
+('Universidade Estadual de Campinas', 'UNICAMP'),
+('Universidade Estadual Paulista', 'UNESP'),
+('Universidade Federal do Rio de Janeiro', 'UFRJ'),
+('Universidade Federal de Minas Gerais', 'UFMG'),
+('Universidade Federal do Paraná', 'UFPR'),
+('Universidade Tecnológica Federal do Paraná', 'UTFPR'),
+('Universidade Federal de Santa Catarina', 'UFSC'),
+('Universidade Federal do Rio Grande do Sul', 'UFRGS'),
+('Universidade de Brasília', 'UnB'),
+('Universidade Federal da Bahia', 'UFBA'),
+('Universidade Federal de Pernambuco', 'UFPE'),
+('Universidade Federal do Ceará', 'UFC'),
+('Pontifícia Universidade Católica do Paraná', 'PUCPR'),
+('Pontifícia Universidade Católica de São Paulo', 'PUC-SP'),
+('Pontifícia Universidade Católica do Rio de Janeiro', 'PUC-Rio'),
+('Pontifícia Universidade Católica do Rio Grande do Sul', 'PUCRS'),
+('Universidade Presbiteriana Mackenzie', 'Mackenzie');
 
-INSERT INTO cursos (universidade_id, nome) VALUES
-(1,'Design'), (1,'Ciência da Computação'), (1,'Jornalismo'), (2,'Psicologia');
+-- Cursos: a mesma lista para cada universidade (CROSS JOIN = todas as combinações).
+CREATE TEMPORARY TABLE lista_cursos (nome VARCHAR(140));
+INSERT INTO lista_cursos VALUES
+('Administração'),
+('Arquitetura e Urbanismo'),
+('Biologia'),
+('Ciência da Computação'),
+('Ciências Contábeis'),
+('Design'),
+('Direito'),
+('Economia'),
+('Enfermagem'),
+('Engenharia Civil'),
+('Engenharia de Software'),
+('Engenharia Mecânica'),
+('Farmácia'),
+('História'),
+('Jornalismo'),
+('Letras'),
+('Medicina'),
+('Pedagogia'),
+('Psicologia'),
+('Publicidade e Propaganda'),
+('Sistemas de Informação');
+INSERT INTO cursos (universidade_id, nome) SELECT u.id, l.nome FROM universidades u CROSS JOIN lista_cursos l;
 
 INSERT INTO interesses (nome) VALUES
-('Design'),('Música'),('Leitura'),('Jogos'),('Natureza'),('Cinema'),('Tecnologia'),('Cafés');
+('Cafés'), ('Cinema'), ('Design'), ('Jogos'), ('Leitura'), ('Música'), ('Natureza'), ('Tecnologia'),
+('Animes'), ('Arte'), ('Ciência'), ('Culinária'), ('Dança'), ('Empreendedorismo'), ('Esportes'), ('Fotografia'),
+('Idiomas'), ('Meio ambiente'), ('Moda'), ('Podcasts'), ('Séries'), ('Teatro'), ('Viagens'), ('Voluntariado');

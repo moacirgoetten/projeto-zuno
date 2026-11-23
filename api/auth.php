@@ -1,198 +1,152 @@
 <?php
-declare(strict_types=1);
+// Conta: sessão, catálogo, cadastro, login, perfil, foto e exclusão da conta.
+require __DIR__ . '/base.php';
 
-require __DIR__ . '/bootstrap.php';
-
-const PHOTO_DIR = __DIR__ . '/../uploads/fotos';
-const PHOTO_NAME = '/^[a-f0-9]{32}\.(jpg|png|webp)$/';
-const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
-
-function userPhotos(PDO $db, int $userId): array
+// Perfil completo de um usuário (usado para o usuário conectado).
+function profile(int $id): array
 {
-    $query = $db->prepare('SELECT caminho FROM fotos WHERE usuario_id = ? UNION SELECT foto_url FROM usuarios WHERE id = ? AND foto_url IS NOT NULL');
-    $query->execute([$userId, $userId]);
-    return $query->fetchAll(PDO::FETCH_COLUMN);
+    $user = q('SELECT u.id, u.nome, u.email, u.bio, u.foto_url, u.curso_id, c.nome AS curso, c.universidade_id, v.nome AS universidade
+        FROM usuarios u LEFT JOIN cursos c ON c.id = u.curso_id LEFT JOIN universidades v ON v.id = c.universidade_id WHERE u.id = ?', [$id])->fetch();
+    $user['foto'] = photoUrl($id, $user['foto_url']);
+    unset($user['foto_url']);
+    $user['interesses'] = q('SELECT interesse_id FROM usuario_interesses WHERE usuario_id = ?', [$id])->fetchAll(PDO::FETCH_COLUMN);
+    return $user;
 }
 
-function deletePhotoFiles(array $names): void
+// Confere se o curso existe e pertence à universidade escolhida.
+function validCourse(array $d): int
 {
-    foreach ($names as $name) {
-        if (preg_match(PHOTO_NAME, (string) $name) && is_file(PHOTO_DIR . '/' . $name)) unlink(PHOTO_DIR . '/' . $name);
+    $course = id($d, 'course_id');
+    $ok = q('SELECT 1 FROM cursos c JOIN universidades v ON v.id = c.universidade_id WHERE c.id = ? AND v.id = ? AND v.ativo = 1',
+        [$course, id($d, 'university_id')])->fetch();
+    if (!$ok) respond(['error' => 'Selecione universidade e curso válidos.'], 422);
+    return $course;
+}
+
+// Troca (ou remove, com $name = null) a foto e apaga os arquivos antigos.
+function savePhoto(int $id, ?string $name): never
+{
+    $old = q('SELECT caminho FROM fotos WHERE usuario_id = ? UNION SELECT foto_url FROM usuarios WHERE id = ?', [$id, $id])->fetchAll(PDO::FETCH_COLUMN);
+    try {
+        db()->beginTransaction();
+        q('DELETE FROM fotos WHERE usuario_id = ?', [$id]);
+        if ($name) q('INSERT INTO fotos (usuario_id, caminho, principal) VALUES (?, ?, 1)', [$id, $name]);
+        q('UPDATE usuarios SET foto_url = ? WHERE id = ?', [$name, $id]);
+        db()->commit();
+    } catch (Throwable $e) {
+        if ($name) deletePhotos([$name]); // o banco falhou: apaga o arquivo novo
+        throw $e;
     }
+    deletePhotos($old);
+    respond(['user' => profile($id)]);
+}
+
+function logout(): never
+{
+    $_SESSION = [];
+    session_destroy();
+    setcookie(session_name(), '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+    respond(['ok' => true]);
 }
 
 $action = $_GET['action'] ?? 'session';
-$method = $_SERVER['REQUEST_METHOD'];
-$newPhoto = null;
-
 try {
-    if ($method === 'GET' && $action === 'session') {
-        $user = empty($_SESSION['user_id']) ? null : currentUser(database());
-        respond(['user' => $user, 'csrf' => $_SESSION['csrf']]);
+    if ($action === 'session') {
+        $id = (int) ($_SESSION['user_id'] ?? 0);
+        $ok = $id && q('SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1', [$id])->fetch();
+        respond(['user' => $ok ? profile($id) : null, 'csrf' => $_SESSION['csrf']]);
     }
-    if ($method === 'GET' && $action === 'catalog') {
-        $db = database();
-        respond([
-            'universidades' => $db->query('SELECT id, nome FROM universidades WHERE ativo = 1 ORDER BY nome')->fetchAll(),
-            'cursos' => $db->query('SELECT c.id, c.nome, c.universidade_id FROM cursos c JOIN universidades u ON u.id = c.universidade_id WHERE u.ativo = 1 ORDER BY c.nome')->fetchAll(),
-            'interesses' => $db->query('SELECT id, nome FROM interesses ORDER BY nome')->fetchAll(),
-        ]);
-    }
-    if ($method === 'GET' && $action === 'photo') {
-        $db = database();
-        if (!currentUser($db)) respond(['error' => 'Entre para ver fotos de perfil.'], 401);
-        $query = $db->prepare('SELECT foto_url FROM usuarios WHERE id = ? AND ativo = 1');
-        $query->execute([filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT) ?: 0]);
-        $name = (string) $query->fetchColumn();
-        if (!preg_match(PHOTO_NAME, $name, $match) || !is_file(PHOTO_DIR . '/' . $name)) {
-            respond(['error' => 'Foto não encontrada.'], 404);
-        }
-        header('Content-Type: ' . ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'][$match[1]]);
-        header('Content-Length: ' . filesize(PHOTO_DIR . '/' . $name));
+    if ($action === 'catalog') respond([
+        'universidades' => q('SELECT id, nome FROM universidades WHERE ativo = 1 ORDER BY nome')->fetchAll(),
+        'cursos' => q('SELECT id, nome, universidade_id FROM cursos ORDER BY nome')->fetchAll(),
+        'interesses' => q('SELECT id, nome FROM interesses ORDER BY nome')->fetchAll(),
+    ]);
+    // Foto de perfil: só quem está conectado vê, e o nome do arquivo nunca é exposto.
+    if ($action === 'photo' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        me();
+        $name = (string) q('SELECT foto_url FROM usuarios WHERE id = ? AND ativo = 1', [id($_GET)])->fetchColumn();
+        if (!preg_match(PHOTO_NAME, $name, $m) || !is_file(PHOTO_DIR . "/$name")) respond(['error' => 'Foto não encontrada.'], 404);
+        header('Content-Type: image/' . ($m[1] === 'jpg' ? 'jpeg' : $m[1]));
         header('Cache-Control: private, max-age=86400');
-        readfile(PHOTO_DIR . '/' . $name);
+        readfile(PHOTO_DIR . "/$name");
         exit;
     }
-    if (!in_array($action, ['login', 'signup', 'logout', 'profile', 'photo', 'photo_remove'], true)) {
+    if (!in_array($action, ['login', 'signup', 'logout', 'profile', 'photo', 'photo_remove', 'delete_account'], true)) {
         respond(['error' => 'Ação inexistente.'], 404);
     }
-    if ($method !== 'POST') {
-        header('Allow: POST');
-        respond(['error' => 'Use POST para esta ação.'], 405);
-    }
-    requireCsrf();
 
-    if ($action === 'photo') {
-        $db = database();
-        $user = currentUser($db);
-        if (!$user) respond(['error' => 'Entre novamente para alterar sua foto.'], 401);
-        // Sem o arquivo em $_FILES, o envio pode ter passado do post_max_size do PHP.
-        $file = $_FILES['photo'] ?? null;
-        $types = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-        $image = is_array($file) && ($file['error'] ?? null) === UPLOAD_ERR_OK && $file['size'] <= PHOTO_MAX_BYTES
-            && is_uploaded_file($file['tmp_name']) ? @getimagesize($file['tmp_name']) : false;
-        if (!$image || !isset($types[$image[2]]) || $image[0] > 4000 || $image[1] > 4000) {
-            respond(['error' => 'Envie uma imagem JPG, PNG ou WebP de até 2 MB e no máximo 4000×4000 pixels.'], 422);
-        }
-        if (!is_dir(PHOTO_DIR) && !mkdir(PHOTO_DIR, 0755, true)) throw new RuntimeException('Pasta de fotos indisponível.');
-        $name = bin2hex(random_bytes(16)) . '.' . $types[$image[2]];
-        if (!move_uploaded_file($file['tmp_name'], PHOTO_DIR . '/' . $name)) throw new RuntimeException('Falha ao gravar a foto.');
-        $newPhoto = $name;
-        $old = userPhotos($db, (int) $user['id']);
-        $db->beginTransaction();
-        $db->prepare('DELETE FROM fotos WHERE usuario_id = ?')->execute([$user['id']]);
-        $db->prepare('INSERT INTO fotos (usuario_id, caminho, principal) VALUES (?, ?, 1)')->execute([$user['id'], $name]);
-        $db->prepare('UPDATE usuarios SET foto_url = ? WHERE id = ?')->execute([$name, $user['id']]);
-        $db->commit();
-        $newPhoto = null;
-        deletePhotoFiles($old);
-        respond(['user' => currentUser($db)]);
-    }
+    $d = post(); // daqui em diante: só POST com token CSRF
+    $pass = is_string($d['password'] ?? null) ? $d['password'] : '';
 
-    $data = json_decode(file_get_contents('php://input'), true);
-    if (!is_array($data)) respond(['error' => 'Dados inválidos.'], 400);
-
-    if ($action === 'logout') {
-        $_SESSION = [];
-        session_destroy();
-        $cookie = session_get_cookie_params();
-        setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => $cookie['path'],
-            'secure' => $cookie['secure'], 'httponly' => true, 'samesite' => 'Lax']);
-        respond(['ok' => true]);
-    }
-
-    if ($action === 'photo_remove') {
-        $db = database();
-        $user = currentUser($db);
-        if (!$user) respond(['error' => 'Entre novamente para alterar sua foto.'], 401);
-        $old = userPhotos($db, (int) $user['id']);
-        $db->beginTransaction();
-        $db->prepare('DELETE FROM fotos WHERE usuario_id = ?')->execute([$user['id']]);
-        $db->prepare('UPDATE usuarios SET foto_url = NULL WHERE id = ?')->execute([$user['id']]);
-        $db->commit();
-        deletePhotoFiles($old);
-        respond(['user' => currentUser($db)]);
-    }
-
-    if ($action === 'profile') {
-        $db = database();
-        $user = currentUser($db);
-        if (!$user) respond(['error' => 'Entre novamente para editar seu perfil.'], 401);
-        $bio = $data['bio'] ?? null;
-        $course = filter_var($data['course_id'] ?? null, FILTER_VALIDATE_INT);
-        $university = filter_var($data['university_id'] ?? null, FILTER_VALIDATE_INT);
-        $interests = $data['interests'] ?? null;
-        if (!is_string($bio) || mb_strlen($bio) > 500 || !is_array($interests) || count($interests) > 100) {
-            respond(['error' => 'Informe uma bio de até 500 caracteres e interesses válidos.'], 422);
-        }
-        foreach ($interests as $interest) {
-            if (!is_int($interest) || $interest < 1) respond(['error' => 'Interesse inválido.'], 422);
-        }
-        $interests = array_values(array_unique($interests));
-        $query = $db->prepare('SELECT c.id FROM cursos c JOIN universidades v ON v.id = c.universidade_id WHERE c.id = ? AND v.id = ? AND v.ativo = 1');
-        $query->execute([$course, $university]);
-        if (!$query->fetch()) respond(['error' => 'Selecione universidade e curso válidos.'], 422);
-        if ($interests) {
-            $query = $db->prepare('SELECT COUNT(*) FROM interesses WHERE id IN (' . implode(',', array_fill(0, count($interests), '?')) . ')');
-            $query->execute($interests);
-            if ((int) $query->fetchColumn() !== count($interests)) respond(['error' => 'Interesse inválido.'], 422);
-        }
-        $db->beginTransaction();
-        $query = $db->prepare('UPDATE usuarios SET bio = ?, curso_id = ? WHERE id = ?');
-        $query->execute([trim($bio), $course, $user['id']]);
-        $query = $db->prepare('DELETE FROM usuario_interesses WHERE usuario_id = ?');
-        $query->execute([$user['id']]);
-        $query = $db->prepare('INSERT INTO usuario_interesses (usuario_id, interesse_id) VALUES (?, ?)');
-        foreach ($interests as $interest) $query->execute([$user['id'], $interest]);
-        $db->commit();
-        respond(['user' => currentUser($db)]);
-    }
-
-    $email = is_string($data['email'] ?? null) ? strtolower(trim($data['email'])) : '';
-    $password = is_string($data['password'] ?? null) ? $data['password'] : '';
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) {
-        respond(['error' => 'Informe um e-mail válido.'], 422);
-    }
-    if ($password === '' || strlen($password) > 72) {
-        respond(['error' => 'A senha deve ter entre 1 e 72 bytes.'], 422);
-    }
-    $db = database();
     if ($action === 'signup') {
-        $name = is_string($data['name'] ?? null) ? trim($data['name']) : '';
-        $course = filter_var($data['course_id'] ?? null, FILTER_VALIDATE_INT);
-        $university = filter_var($data['university_id'] ?? null, FILTER_VALIDATE_INT);
-        if ($name === '' || mb_strlen($name) > 120 || mb_strlen($password) < 8 || ($data['consent'] ?? false) !== true) {
-            respond(['error' => 'Informe nome (até 120 caracteres), senha com pelo menos 8 caracteres e aceite o consentimento.'], 422);
+        $name = text($d, 'name');
+        $email = strtolower(text($d, 'email'));
+        if ($name === '' || mb_strlen($name) > 120 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190
+            || mb_strlen($pass) < 8 || strlen($pass) > 72 || ($d['consent'] ?? false) !== true) {
+            respond(['error' => 'Informe nome, e-mail válido, senha de 8 a 72 caracteres e aceite o termo.'], 422);
         }
-        $query = $db->prepare('SELECT c.id FROM cursos c JOIN universidades u ON u.id = c.universidade_id WHERE c.id = ? AND u.id = ? AND u.ativo = 1');
-        $query->execute([$course, $university]);
-        if (!$query->fetch()) respond(['error' => 'Selecione uma universidade e um curso válidos.'], 422);
-        $db->beginTransaction();
-        $query = $db->prepare('INSERT INTO usuarios (nome, email, senha_hash, curso_id) VALUES (?, ?, ?, ?)');
-        $query->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT), $course]);
-        $id = (int) $db->lastInsertId();
-        $query = $db->prepare('INSERT INTO consentimentos (usuario_id, versao_termo) VALUES (?, ?)');
-        $query->execute([$id, '1.0']);
-        $db->commit();
+        $course = validCourse($d);
+        if (q('SELECT 1 FROM usuarios WHERE email = ?', [$email])->fetch()) respond(['error' => 'Este e-mail já está cadastrado.'], 409);
+        db()->beginTransaction();
+        q('INSERT INTO usuarios (nome, email, senha_hash, curso_id) VALUES (?, ?, ?, ?)', [$name, $email, password_hash($pass, PASSWORD_DEFAULT), $course]);
+        q('INSERT INTO consentimentos (usuario_id, versao_termo) VALUES (?, ?)', [db()->lastInsertId(), '1.0']);
+        db()->commit();
         respond(['ok' => true], 201);
     }
-
-    $query = $db->prepare('SELECT id, senha_hash FROM usuarios WHERE email = ? AND ativo = 1');
-    $query->execute([$email]);
-    $user = $query->fetch();
-    // Verifica um hash também para e-mails inexistentes.
-    $valid = password_verify($password, $user['senha_hash'] ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
-    if (!$user || !$valid) respond(['error' => 'E-mail ou senha inválidos.'], 401);
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = (int) $user['id'];
-    $_SESSION['csrf'] = bin2hex(random_bytes(32));
-    respond(['user' => currentUser($db), 'csrf' => $_SESSION['csrf']]);
-} catch (Throwable $error) {
-    if (isset($db) && $db->inTransaction()) $db->rollBack();
-    if ($newPhoto !== null) deletePhotoFiles([$newPhoto]);
-    if ($error instanceof PDOException && ($error->errorInfo[1] ?? null) === 1062) {
-        respond(['error' => 'Este e-mail já está cadastrado.'], 409);
+    if ($action === 'login') {
+        $user = q('SELECT id, senha_hash FROM usuarios WHERE email = ? AND ativo = 1', [strtolower(text($d, 'email'))])->fetch();
+        // Com e-mail inexistente compara com um hash falso: o tempo de resposta não revela quais contas existem.
+        $valid = password_verify($pass, $user['senha_hash'] ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
+        if (!$user || !$valid) respond(['error' => 'E-mail ou senha inválidos.'], 401);
+        session_regenerate_id(true); // novo id de sessão evita fixação de sessão
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        respond(['user' => profile($user['id']), 'csrf' => $_SESSION['csrf']]);
     }
-    error_log('Zuno auth: ' . $error->getMessage());
-    respond(['error' => 'Não foi possível concluir a operação. Confira a configuração do banco e tente novamente.'], 503);
+    if ($action === 'logout') logout();
+
+    $id = me(); // as ações abaixo sempre alteram a conta conectada, nunca um id enviado pelo navegador
+
+    if ($action === 'profile') {
+        $bio = text($d, 'bio');
+        $interests = $d['interests'] ?? null;
+        if (mb_strlen($bio) > 500 || !is_array($interests) || count($interests) > 50 || array_filter($interests, fn($i) => !is_int($i))) {
+            respond(['error' => 'Informe uma bio de até 500 caracteres e interesses válidos.'], 422);
+        }
+        $course = validCourse($d);
+        $interests = array_values(array_unique($interests));
+        if ($interests && q('SELECT COUNT(*) FROM interesses WHERE id IN (' . rtrim(str_repeat('?,', count($interests)), ',') . ')', $interests)->fetchColumn() != count($interests)) {
+            respond(['error' => 'Interesse inválido.'], 422);
+        }
+        db()->beginTransaction();
+        q('UPDATE usuarios SET bio = ?, curso_id = ? WHERE id = ?', [$bio, $course, $id]);
+        q('DELETE FROM usuario_interesses WHERE usuario_id = ?', [$id]);
+        foreach ($interests as $i) q('INSERT INTO usuario_interesses (usuario_id, interesse_id) VALUES (?, ?)', [$id, $i]);
+        db()->commit();
+        respond(['user' => profile($id)]);
+    }
+    if ($action === 'photo') {
+        $file = $_FILES['photo'] ?? null;
+        $types = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+        // O tipo é conferido pelo conteúdo da imagem, não pela extensão do arquivo.
+        $img = ($file['error'] ?? 1) === UPLOAD_ERR_OK && $file['size'] <= 2 * 1024 * 1024 ? @getimagesize($file['tmp_name']) : false;
+        if (!$img || !isset($types[$img[2]]) || $img[0] > 4000 || $img[1] > 4000) {
+            respond(['error' => 'Envie uma imagem JPG, PNG ou WebP de até 2 MB e no máximo 4000×4000 pixels.'], 422);
+        }
+        $name = bin2hex(random_bytes(16)) . '.' . $types[$img[2]]; // nome aleatório, impossível de adivinhar
+        if (!is_dir(PHOTO_DIR)) mkdir(PHOTO_DIR, 0755, true);
+        if (!move_uploaded_file($file['tmp_name'], PHOTO_DIR . "/$name")) throw new RuntimeException('Falha ao gravar a foto.');
+        savePhoto($id, $name);
+    }
+    if ($action === 'photo_remove') savePhoto($id, null);
+
+    // Exclusão da conta (LGPD): o ON DELETE CASCADE apaga interesses, conexões, mensagens, notificações, denúncias e consentimento.
+    $hash = q('SELECT senha_hash FROM usuarios WHERE id = ?', [$id])->fetchColumn();
+    if (!password_verify($pass, $hash)) respond(['error' => 'Senha incorreta.'], 422);
+    $photos = q('SELECT caminho FROM fotos WHERE usuario_id = ?', [$id])->fetchAll(PDO::FETCH_COLUMN);
+    q('DELETE FROM usuarios WHERE id = ?', [$id]);
+    deletePhotos($photos);
+    logout();
+} catch (Throwable $e) {
+    fail($e);
 }

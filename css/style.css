@@ -357,20 +357,8 @@ select:focus {
     font-size: 1.4rem
 }
 
-.avatar.purple {
-    background: #e5e2ff;
-    color: #5b4dc4
-}
 
-.avatar.peach {
-    background: #ffe9dc;
-    color: #b45e3e
-}
 
-.avatar.green {
-    background: #dff5e9;
-    color: #278362
-}
 
 .toolbar {
     display: flex;
@@ -695,10 +683,6 @@ select:focus {
     min-width: 0
 }
 
-.chat-disclaimer {
-    padding: 0 20px 12px;
-    margin: 0
-}
 
 .screen {
     display: none
@@ -712,12 +696,6 @@ select:focus {
     min-height: 100vh
 }
 
-.nav-title {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 15px
-}
 
 @media(max-width:1100px) {
     .people-grid {
@@ -861,7 +839,6 @@ select:focus {
     }
 
 }
-
 @media(max-width:420px) {
     .chat-person {
         width: 100%
@@ -892,4 +869,41 @@ select:focus {
 
 [hidden] {
     display: none !important
+}
+
+/* Sprints 5 e 6 */
+.badge {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 99px;
+    padding: 1px 7px;
+    font-size: .72rem
+}
+
+.person-card .btn+.btn {
+    margin-top: 8px
+}
+
+.chat-header {
+    font-size: .95rem
+}
+
+.chat-messages {
+    max-height: 460px;
+    overflow-y: auto
+}
+
+.bubble {
+    overflow-wrap: anywhere
+}
+
+#notif-list p {
+    margin: 0;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line)
+}
+
+#notif-list small {
+    color: var(--muted);
+    margin-left: 8px
 }
